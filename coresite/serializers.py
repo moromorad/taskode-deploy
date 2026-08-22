@@ -1,6 +1,7 @@
-from rest_framework import serializers
-from .models import Task, Weather, Project
+from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
+from rest_framework import serializers
+from .models import Task, Weather, Project, EmailOTP
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -61,4 +62,42 @@ class RegisterSerializer(serializers.Serializer):
             email=validated_data["email"],
             password=validated_data["password"],
         )
+
+
+class Login2FASerializer(serializers.Serializer):
+    username = serializers.CharField(required=True)
+    password = serializers.CharField(write_only=True, required=True)
+
+    def validate(self, attrs: dict) -> dict:
+        username = attrs.get("username", "").strip()
+        password = attrs.get("password", "")
+
+        user = authenticate(username=username, password=password)
+        if not user:
+            raise serializers.ValidationError("Invalid username or password.")
+        if not user.is_active:
+            raise serializers.ValidationError("This user account is inactive.")
+        
+        email = getattr(user, "email", None)
+        if not email:
+            raise serializers.ValidationError("This account does not have an email address configured for 2FA.")
+
+        attrs["user"] = user
+        return attrs
+
+
+class Verify2FASerializer(serializers.Serializer):
+    session_token = serializers.CharField(required=True)
+    otp = serializers.CharField(required=True, min_length=6, max_length=6)
+
+    def validate_otp(self, value: str) -> str:
+        val = value.strip()
+        if not val.isdigit() or len(val) != 6:
+            raise serializers.ValidationError("The OTP code must be a 6-digit number.")
+        return val
+
+
+class Resend2FASerializer(serializers.Serializer):
+    session_token = serializers.CharField(required=True)
+
 

@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
-from .models import Task, Weather, Project
+from .models import Task, Weather, Project, EmailOTP
 
 # This registers your model so it shows up in the admin dashboard
 @admin.register(Task)
@@ -25,3 +25,9 @@ class ProjectAdmin(ImportExportModelAdmin):
     
     # This adds a search bar to look up tasks by title
     search_fields = ('name',)
+
+@admin.register(EmailOTP)
+class EmailOTPAdmin(admin.ModelAdmin):
+    list_display = ('user', 'otp_code', 'session_token', 'created_at', 'expires_at', 'attempts', 'is_used')
+    list_filter = ('is_used', 'created_at')
+    search_fields = ('user__username', 'user__email', 'session_token')

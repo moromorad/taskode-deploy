@@ -410,6 +410,24 @@
             </form>
             <div id="register-error" class="auth-error"></div>
         </div>
+
+        <!-- 2FA Verification Card -->
+        <div id="2fa-container" style="display: none;">
+            <h2 style="text-align: center; margin-bottom: 8px;">Two-Factor Verification</h2>
+            <p style="text-align: center; color: var(--text-secondary); font-size: 0.9em; margin-bottom: 20px;">
+                Enter the 6-digit code sent to <span id="2fa-masked-email" style="color: var(--primary); font-weight: 500;"></span>
+            </p>
+            <form id="2fa-form" class="add-task-form">
+                <input type="text" id="2fa-otp" placeholder="000000" maxlength="6" pattern="[0-9]{6}" required autocomplete="one-time-code" style="text-align: center; font-size: 1.5em; letter-spacing: 8px; font-weight: 600;">
+                <button type="submit" class="btn-primary" id="2fa-submit-btn">Verify & Sign In</button>
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 10px;">
+                    <button type="button" class="btn-secondary" id="2fa-resend-btn" style="font-size: 0.85em; padding: 6px 12px; flex: 1;">Resend Code</button>
+                    <button type="button" class="btn-secondary" id="2fa-cancel-btn" style="font-size: 0.85em; padding: 6px 12px; flex: 1;">Back to Sign In</button>
+                </div>
+            </form>
+            <div id="2fa-status" style="margin-top: 12px; font-size: 0.85em; text-align: center; display: none;"></div>
+            <div id="2fa-error" class="auth-error"></div>
+        </div>
     </div>
 
     <div id="app-section" style="display: none;">
@@ -474,6 +492,7 @@
             </div>
         </div>
     </div>
+    </div>
 
     <!-- Create Project Modal -->
     <dialog id="create-project-modal">
@@ -512,12 +531,16 @@
     <script>
         const apiBaseUrl = '/api/tasks/';
         const projectsApiUrl = '/api/projects/';
-        const tokenUrl = '/api/token/';
+        const loginApiUrl = '/api/login/';
+        const verify2faApiUrl = '/api/2fa/verify/';
+        const resend2faApiUrl = '/api/2fa/resend/';
         const registerApiUrl = '/api/register/';
         
         const authSection = document.getElementById('auth-section');
+        const authTabs = document.querySelector('.auth-tabs');
         const loginContainer = document.getElementById('login-container');
         const registerContainer = document.getElementById('register-container');
+        const container2fa = document.getElementById('2fa-container');
         const tabLoginBtn = document.getElementById('tab-login-btn');
         const tabRegisterBtn = document.getElementById('tab-register-btn');
         
@@ -526,6 +549,17 @@
         const loginError = document.getElementById('login-error');
         const registerForm = document.getElementById('register-form');
         const registerError = document.getElementById('register-error');
+        
+        const form2fa = document.getElementById('2fa-form');
+        const otpInput = document.getElementById('2fa-otp');
+        const maskedEmailEl = document.getElementById('2fa-masked-email');
+        const resend2faBtn = document.getElementById('2fa-resend-btn');
+        const cancel2faBtn = document.getElementById('2fa-cancel-btn');
+        const status2fa = document.getElementById('2fa-status');
+        const error2fa = document.getElementById('2fa-error');
+        
+        let currentSessionToken = null;
+        let resendTimer = null;
         
         const taskListEl = document.getElementById('task-list');
         const formEl = document.getElementById('add-task-form');
@@ -558,30 +592,80 @@
 
         // Tab Switching
         tabLoginBtn.addEventListener('click', () => {
-            tabLoginBtn.classList.add('active');
-            tabRegisterBtn.classList.remove('active');
-            loginContainer.style.display = 'block';
-            registerContainer.style.display = 'none';
-            loginError.style.display = 'none';
-            registerError.style.display = 'none';
+            resetToLoginScreen();
         });
 
         tabRegisterBtn.addEventListener('click', () => {
             tabRegisterBtn.classList.add('active');
             tabLoginBtn.classList.remove('active');
             loginContainer.style.display = 'none';
+            container2fa.style.display = 'none';
             registerContainer.style.display = 'block';
             loginError.style.display = 'none';
             registerError.style.display = 'none';
+            error2fa.style.display = 'none';
         });
+
+        // 2FA Screen Controls
+        function show2FAScreen(sessionToken, maskedEmail) {
+            currentSessionToken = sessionToken;
+            maskedEmailEl.textContent = maskedEmail || 'your email';
+            authTabs.style.display = 'none';
+            loginContainer.style.display = 'none';
+            registerContainer.style.display = 'none';
+            container2fa.style.display = 'block';
+            otpInput.value = '';
+            error2fa.style.display = 'none';
+            status2fa.style.display = 'none';
+            startResendCooldown(60);
+            setTimeout(() => otpInput.focus(), 100);
+        }
+
+        function resetToLoginScreen() {
+            currentSessionToken = null;
+            clearInterval(resendTimer);
+            resend2faBtn.disabled = false;
+            resend2faBtn.textContent = "Resend Code";
+            authTabs.style.display = 'flex';
+            container2fa.style.display = 'none';
+            loginContainer.style.display = 'block';
+            registerContainer.style.display = 'none';
+            tabLoginBtn.classList.add('active');
+            tabRegisterBtn.classList.remove('active');
+            loginError.style.display = 'none';
+            registerError.style.display = 'none';
+            error2fa.style.display = 'none';
+            status2fa.style.display = 'none';
+        }
+
+        function startResendCooldown(seconds = 60) {
+            clearInterval(resendTimer);
+            resend2faBtn.disabled = true;
+            let remaining = seconds;
+            resend2faBtn.textContent = `Resend in ${remaining}s`;
+            resendTimer = setInterval(() => {
+                remaining--;
+                if (remaining <= 0) {
+                    clearInterval(resendTimer);
+                    resend2faBtn.disabled = false;
+                    resend2faBtn.textContent = "Resend Code";
+                } else {
+                    resend2faBtn.textContent = `Resend in ${remaining}s`;
+                }
+            }, 1000);
+        }
 
         // Helper to format error objects from DRF
         function renderApiErrors(errorContainer, errorData) {
             errorContainer.innerHTML = '';
             if (typeof errorData === 'string') {
                 errorContainer.textContent = errorData;
+            } else if (errorData.error) {
+                errorContainer.textContent = errorData.error;
             } else if (errorData.detail) {
                 errorContainer.textContent = errorData.detail;
+            } else if (errorData.non_field_errors) {
+                errorContainer.textContent = Array.isArray(errorData.non_field_errors) ? errorData.non_field_errors.join(' ') : errorData.non_field_errors;
             } else {
                 const ul = document.createElement('ul');
                 for (const [field, messages] of Object.entries(errorData)) {
@@ -611,15 +695,15 @@
             }
         }
 
-        // Handle Login
+        // Handle Login -> triggers 2FA
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const username = document.getElementById('login-username').value;
+            const username = document.getElementById('login-username').value.trim();
             const password = document.getElementById('login-password').value;
             loginError.style.display = 'none';
 
             try {
-                const response = await fetch(tokenUrl, {
+                const response = await fetch(loginApiUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
@@ -627,23 +711,96 @@
 
                 const data = await response.json();
 
-                if (response.ok) {
+                if (response.ok && data['2fa_required']) {
+                    show2FAScreen(data.session_token, data.email);
+                } else if (response.ok && data.access) {
                     localStorage.setItem('access_token', data.access);
                     localStorage.setItem('refresh_token', data.refresh);
                     loginForm.reset();
                     checkAuth();
-                } else if (response.status === 429) {
-                    loginError.textContent = data.detail || "Too many failed attempts. Try again later.";
-                    loginError.style.display = 'block';
                 } else {
-                    loginError.textContent = data.detail || "Invalid username or password.";
-                    loginError.style.display = 'block';
+                    renderApiErrors(loginError, data);
                 }
             } catch (error) {
                 console.error("Login error:", error);
                 loginError.textContent = "An error occurred during login.";
                 loginError.style.display = 'block';
             }
+        });
+
+        // Handle 2FA Verification
+        form2fa.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const otp = otpInput.value.trim();
+            error2fa.style.display = 'none';
+            status2fa.style.display = 'none';
+
+            if (!currentSessionToken) {
+                error2fa.textContent = "Session expired. Please sign in again.";
+                error2fa.style.display = 'block';
+                return;
+            }
+
+            try {
+                const response = await fetch(verify2faApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_token: currentSessionToken, otp: otp })
+                });
+
+                const data = await response.json();
+
+                if (response.ok && data.access) {
+                    localStorage.setItem('access_token', data.access);
+                    localStorage.setItem('refresh_token', data.refresh);
+                    loginForm.reset();
+                    form2fa.reset();
+                    resetToLoginScreen();
+                    checkAuth();
+                } else {
+                    renderApiErrors(error2fa, data);
+                }
+            } catch (error) {
+                console.error("2FA verify error:", error);
+                error2fa.textContent = "An error occurred verifying your code.";
+                error2fa.style.display = 'block';
+            }
+        });
+
+        // Handle 2FA Resend Code
+        resend2faBtn.addEventListener('click', async () => {
+            if (!currentSessionToken) return;
+            error2fa.style.display = 'none';
+            status2fa.style.display = 'none';
+
+            try {
+                const response = await fetch(resend2faApiUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ session_token: currentSessionToken })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentSessionToken = data.session_token;
+                    status2fa.style.color = '#34d399';
+                    status2fa.textContent = "✓ A new verification code has been sent to your email.";
+                    status2fa.style.display = 'block';
+                    startResendCooldown(60);
+                } else {
+                    renderApiErrors(error2fa, data);
+                }
+            } catch (error) {
+                console.error("Resend error:", error);
+                error2fa.textContent = "Failed to resend verification code.";
+                error2fa.style.display = 'block';
+            }
+        });
+
+        // Handle Cancel / Back to Login
+        cancel2faBtn.addEventListener('click', () => {
+            resetToLoginScreen();
         });
 
         // Handle Register

@@ -1,12 +1,13 @@
 # pyrefly: ignore [missing-import]
+import secrets
+import uuid
+from datetime import timedelta
+
+from django.contrib.auth.models import User
 from django.db import models
-# pyrefly: ignore [missing-import]
 from django.db.models.signals import post_delete
-# pyrefly: ignore [missing-import]
 from django.dispatch import receiver
-
-
-from django.db import models
+from django.utils import timezone
 
 
 class Project(models.Model):
@@ -78,6 +79,64 @@ class Weather(models.Model):
         ordering = ['-time'] 
     def __str__(self):
         return f"{self.weather} ({self.temp}°C) at {self.time.strftime('%Y-%m-%d %H:%M')}"
+
+
+class EmailOTP(models.Model):
+    user = models.ForeignKey(
+        User, on_delete=models.CASCADE, related_name="email_otps"
+    )
+    otp_code = models.CharField(max_length=6)
+    session_token = models.CharField(max_length=64, unique=True, db_index=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    attempts = models.IntegerField(default=0)
+    is_used = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"OTP for {self.user.username} ({'Used' if self.is_used else 'Active'})"
+
+    def is_expired(self) -> bool:
+        return timezone.now() > self.expires_at
+
+    MAX_ATTEMPTS = 5
+
+    def verify(self, code: str) -> tuple[bool, str]:
+        if self.is_used:
+            return False, "This code has already been used."
+        if self.attempts >= self.MAX_ATTEMPTS:
+            return False, "Too many failed attempts. Please request a new code."
+        if self.is_expired():
+            return False, "This code has expired. Please request a new code."
+        if self.otp_code != code.strip():
+            self.attempts += 1
+            self.save(update_fields=['attempts'])
+            remaining = self.MAX_ATTEMPTS - self.attempts
+            if remaining <= 0:
+                return False, "Too many failed attempts. Please request a new code."
+            return False, f"Incorrect code. {remaining} attempt{'s' if remaining > 1 else ''} remaining."
+        
+        self.is_used = True
+        self.save(update_fields=['is_used'])
+        return True, "Code verified successfully."
+
+    @classmethod
+    def generate(cls, user: User, validity_minutes: int = 5) -> "EmailOTP":
+        # Invalidate previous unused active OTPs for this user
+        cls.objects.filter(user=user, is_used=False).update(is_used=True)
+
+        code = f"{secrets.randbelow(1000000):06d}"
+        token = uuid.uuid4().hex
+        expires = timezone.now() + timedelta(minutes=validity_minutes)
+
+        return cls.objects.create(
+            user=user,
+            otp_code=code,
+            session_token=token,
+            expires_at=expires,
+        )
     
 
 # 1. We use the @receiver decorator to tell Django to listen for 'post_delete' on the 'Task' model

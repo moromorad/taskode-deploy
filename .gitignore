@@ -1,45 +1,166 @@
-# Environments
+# =========================
+# Python & Bytecode
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# =========================
+# Virtual Environments & Packages
+# =========================
 .env
-venv/
+.env.*
+!.env.example
+!.env.template
 env/
+venv/
 ENV/
 env.bak/
 venv.bak/
+.venv/
+.venv*/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
 
+# =========================
 # Django
+# =========================
 *.log
 *.pot
-*.pyc
-__pycache__/
+*.mo
 local_settings.py
 db.sqlite3
 db.sqlite3-journal
+db.sqlite3-*
 media/
 staticfiles/
+static_root/
+media_root/
 
+# =========================
 # Celery
+# =========================
 celerybeat-schedule
 celerybeat-schedule*
 celerybeat.pid
 
-# Python
-*.py[cod]
-*$py.class
-.mypy_cache/
-.pytest_cache/
-.tox/
+# =========================
+# Testing, Coverage & QA
+# =========================
 .coverage
+.coverage.*
+.coveragerc
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
 htmlcov/
+.tox/
+.nox/
+.pytest_cache/
+.hypothesis/
+.cache
+cover/
+.ruff_cache/
 
-# macOS / System
+# =========================
+# Type Checking (Mypy, Pyre, etc.)
+# =========================
+.mypy_cache/
+.dmypy.json
+dmypy.json
+.pyre/
+.pytype/
+
+# =========================
+# Jupyter Notebooks / IPython
+# =========================
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# =========================
+# Docker / Local Overrides
+# =========================
+docker-compose.override.yml
+*.env.local
+
+# =========================
+# IDEs & Editors
+# =========================
+# Visual Studio Code
+.vscode/
+*.code-workspace
+
+# PyCharm / IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+cmake-build-*/
+out/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# Eclipse / PyDev
+.project
+.pydevproject
+.settings/
+
+# Vim, Emacs & Temporary files
+*.swp
+*.swo
+*.swn
+*~
+.#*
+\#*#
+.directory
+
+# =========================
+# Operating System Files
+# =========================
+# macOS
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-ehthumbs.db
-Thumbs.db
 
-# IDEs
-.vscode/
-.idea/
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# Linux
+.nfs*
+
+# =========================
+# Database & Backup Dumps
+# =========================
+*.sql
+*.sqlite
+*.sqlite3
+*.dump
+*.bak

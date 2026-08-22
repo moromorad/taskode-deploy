@@ -6,31 +6,14 @@ from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from rest_framework import generics, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.exceptions import Throttled
-from rest_framework.permissions import AllowAny
-from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
-from rest_framework.throttling import AnonRateThrottle
-from rest_framework.views import APIView
-from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
 
-from .models import Project, Task, Weather
-from .serializers import ProjectSerializer, RegisterSerializer, TaskSerializer, UserSerializer
-from .services import utils
-from .services.github_parser import sync_project_ast
+from ..models import Project, Task, Weather
+from ..serializers import ProjectSerializer, TaskSerializer, UserSerializer
+from ..services import utils
+from ..services.github_parser import sync_project_ast
 
-
-
-class LoginRateThrottle(AnonRateThrottle):
-    rate: str = '5/minute'
-
-
-class ThrottledTokenObtainPairView(TokenObtainPairView):
-    throttle_classes = [LoginRateThrottle]
-    def throttled(self, request: Request | HttpRequest, wait: int) -> None:
-        raise Throttled(detail="There were too many failed login attempts. Please try again later.")
 
 class TaskViewSet(viewsets.ModelViewSet):
     
@@ -131,30 +114,6 @@ def task_interface(request: HttpRequest) -> HttpResponse:
 
     return render(request, "tasks.html", {"weather": latest_weather, "temp_diff": diff, "abs_diff": abs_diff})
 
-class RegisterView(APIView):
-    authentication_classes = ()
-    permission_classes = [AllowAny]
-    throttle_classes = [LoginRateThrottle]
-
-    def post(self, request: Request) -> Response:
-        serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            user = serializer.save()
-            refresh = RefreshToken.for_user(user)
-            return Response(
-                {
-                    "message": "User registered successfully",
-                    "access": str(refresh.access_token),
-                    "refresh": str(refresh),
-                    "user": {
-                        "id": user.id,
-                        "username": user.username,
-                        "email": user.email,
-                    },
-                },
-                status=status.HTTP_201_CREATED,
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 class UserList(generics.ListAPIView):
     queryset = User.objects.all()
@@ -164,6 +123,3 @@ class UserList(generics.ListAPIView):
 class UserDetail(generics.RetrieveAPIView):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-
-
-
