@@ -2,7 +2,8 @@
 from django.conf import settings
 from django.core.mail import send_mail
 from django.http import HttpRequest
-from rest_framework import status
+from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from rest_framework import serializers, status
 from rest_framework.exceptions import Throttled
 from rest_framework.permissions import AllowAny
 from rest_framework.request import Request
@@ -25,6 +26,11 @@ class LoginRateThrottle(AnonRateThrottle):
     rate: str = "5/minute"
 
 
+@extend_schema(
+    tags=["Authentication"],
+    summary="Obtain JWT token pair (Direct)",
+    description="Takes username and password credentials and returns a JWT access and refresh token pair directly.",
+)
 class ThrottledTokenObtainPairView(TokenObtainPairView):
     throttle_classes = [LoginRateThrottle]
 
@@ -49,6 +55,31 @@ class RegisterView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [LoginRateThrottle]
 
+    @extend_schema(
+        tags=["Authentication"],
+        summary="Register a new user",
+        description="Creates a new user account and returns JWT access and refresh tokens.",
+        request=RegisterSerializer,
+        responses={
+            201: inline_serializer(
+                name="RegisterResponse",
+                fields={
+                    "message": serializers.CharField(),
+                    "access": serializers.CharField(),
+                    "refresh": serializers.CharField(),
+                    "user": inline_serializer(
+                        name="RegisteredUserDetails",
+                        fields={
+                            "id": serializers.IntegerField(),
+                            "username": serializers.CharField(),
+                            "email": serializers.EmailField(),
+                        },
+                    ),
+                },
+            ),
+            400: OpenApiResponse(description="Validation errors (e.g., username/email already taken)"),
+        },
+    )
     def post(self, request: Request) -> Response:
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
@@ -75,6 +106,25 @@ class Login2FAView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [LoginRateThrottle]
 
+    @extend_schema(
+        tags=["Authentication"],
+        summary="Log in (Step 1: Credentials)",
+        description="Authenticates username and password, then generates and emails a 6-digit OTP verification code. Returns a session_token required for Step 2 verification.",
+        request=Login2FASerializer,
+        responses={
+            200: inline_serializer(
+                name="Login2FAResponse",
+                fields={
+                    "message": serializers.CharField(),
+                    "2fa_required": serializers.BooleanField(),
+                    "session_token": serializers.CharField(),
+                    "email": serializers.CharField(),
+                },
+            ),
+            400: OpenApiResponse(description="Invalid username/password or inactive account"),
+            500: OpenApiResponse(description="Failed to send verification email"),
+        },
+    )
     def post(self, request: Request) -> Response:
         serializer = Login2FASerializer(data=request.data)
         if not serializer.is_valid():
@@ -123,6 +173,31 @@ class Verify2FAView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [LoginRateThrottle]
 
+    @extend_schema(
+        tags=["Authentication"],
+        summary="Verify 2FA OTP (Step 2: Verification)",
+        description="Verifies the 6-digit OTP against the session token and issues JWT access and refresh tokens.",
+        request=Verify2FASerializer,
+        responses={
+            200: inline_serializer(
+                name="Verify2FAResponse",
+                fields={
+                    "message": serializers.CharField(),
+                    "access": serializers.CharField(),
+                    "refresh": serializers.CharField(),
+                    "user": inline_serializer(
+                        name="VerifiedUserDetails",
+                        fields={
+                            "id": serializers.IntegerField(),
+                            "username": serializers.CharField(),
+                            "email": serializers.EmailField(),
+                        },
+                    ),
+                },
+            ),
+            400: OpenApiResponse(description="Invalid OTP code or expired session"),
+        },
+    )
     def post(self, request: Request) -> Response:
         serializer = Verify2FASerializer(data=request.data)
         if not serializer.is_valid():
@@ -166,6 +241,24 @@ class Resend2FAView(APIView):
     permission_classes = [AllowAny]
     throttle_classes = [LoginRateThrottle]
 
+    @extend_schema(
+        tags=["Authentication"],
+        summary="Resend 2FA OTP Code",
+        description="Generates a new 6-digit OTP code and emails it to the user using the existing session token.",
+        request=Resend2FASerializer,
+        responses={
+            200: inline_serializer(
+                name="Resend2FAResponse",
+                fields={
+                    "message": serializers.CharField(),
+                    "session_token": serializers.CharField(),
+                    "email": serializers.CharField(),
+                },
+            ),
+            400: OpenApiResponse(description="Invalid or expired session"),
+            500: OpenApiResponse(description="Failed to send verification email"),
+        },
+    )
     def post(self, request: Request) -> Response:
         serializer = Resend2FASerializer(data=request.data)
         if not serializer.is_valid():

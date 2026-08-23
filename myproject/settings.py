@@ -46,6 +46,7 @@ INSTALLED_APPS = [
     'rest_framework',
     'rest_framework_simplejwt',
     'import_export',
+    'drf_spectacular',
 ]
 
 REST_FRAMEWORK = {
@@ -66,7 +67,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '10/minute',  
         'user': '100/minute' 
-    }
+    },
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
 }
 
 MIDDLEWARE = [
@@ -178,6 +180,13 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'coresite.tasks.fetch_weather_and_cleanup',
         'schedule': crontab(minute='*/15'), # Runs at 0, 15, 30, and 45 minutes past the hour
     },
+}
+
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Task App API',
+    'DESCRIPTION': 'API endpoints and schema documentation',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
 }
 
 
