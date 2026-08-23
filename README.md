@@ -22,31 +22,54 @@ The platform bridges codebases and project management by extracting repository s
 
 ```mermaid
 flowchart TD
-    Client["Client / Browser / Frontend"] -->|HTTP / REST| Gunicorn["Gunicorn / Uvicorn (ASGI/WSGI)"]
+    Client["Client / Web Browser"]
     
-    subgraph AppServer["Application Layer"]
-        Gunicorn --> FastAPIRoutes["FastAPI Endpoints (/fast/*)"]
-        Gunicorn --> DRFRoutes["Django REST Framework (/api/*)"]
-        Gunicorn --> SwaggerUI["Swagger Docs (/api/docs/)"]
-        
-        DRFRoutes --> Auth["2FA Email OTP & SimpleJWT"]
-        DRFRoutes --> TaskService["AI Task Generator (Gemini 3.6 Flash)"]
-        DRFRoutes --> ASTService["Tree-sitter GitHub AST Parser"]
+    subgraph WebServer["Web & Application Layer"]
+        Gunicorn["Gunicorn / Uvicorn Server"]
+        DRF["Django REST Framework (/api/*)"]
+        FastAPI["FastAPI Routes (/fast/*)"]
+        Swagger["Swagger UI Docs (/api/docs/)"]
+        Auth["2FA OTP & SimpleJWT Auth"]
+        TaskAI["Gemini AI Ticket Engine"]
+        ASTParser["Tree-sitter AST Parser"]
     end
-    
-    subgraph Background["Async Worker & Scheduling"]
+
+    subgraph Workers["Background Tasks & Scheduling"]
         CeleryWorker["Celery Worker"]
         CeleryBeat["Celery Beat Scheduler"]
-        CeleryBeat -->|Periodic Trigger (30m)| CeleryWorker
-        CeleryWorker -->|Fetch Weather & Prune DB| OpenMeteo["Open-Meteo API"]
     end
+
+    subgraph DataStore["Data & Message Brokers"]
+        Redis[("Redis Cache & Celery Broker")]
+        DB[("SQLite Database")]
+    end
+
+    subgraph External["External APIs"]
+        Gemini["Google Gemini 3.6 Flash"]
+        GitHub["GitHub REST API"]
+        OpenMeteo["Open-Meteo Weather API"]
+    end
+
+    Client -->|HTTP Requests| Gunicorn
+    Gunicorn --> DRF
+    Gunicorn --> FastAPI
+    Gunicorn --> Swagger
     
-    AppServer --> Redis[("Redis Cache & Broker")]
+    DRF --> Auth
+    DRF --> TaskAI
+    DRF --> ASTParser
+    
+    FastAPI --> DB
+    DRF --> DB
+    DRF --> Redis
+    
+    TaskAI -->|Generate Tickets| Gemini
+    ASTParser -->|Fetch Code Tree| GitHub
+    
+    CeleryBeat -->|Trigger Periodic Tasks| CeleryWorker
     CeleryWorker --> Redis
-    AppServer --> SQLite[("SQLite Database")]
-    CeleryWorker --> SQLite
-    TaskService --> GeminiAPI["Google Gemini API"]
-    ASTService --> GitHubAPI["GitHub REST API"]
+    CeleryWorker --> DB
+    CeleryWorker -->|Fetch Telemetry| OpenMeteo
 ```
 
 ---
@@ -159,20 +182,20 @@ Stores scheduled weather records for dashboard telemetry.
 sequenceDiagram
     autonumber
     actor User as User / Client
-    participant API as Django API (/api/login/)
-    participant DB as SQLite DB
-    participant Mail as SMTP Email Server
+    participant API as Django Auth API
+    participant DB as SQLite Database
+    participant Mail as SMTP Mail Server
     
-    User->>API: POST /api/login/ {username, password}
+    User->>API: POST /api/login/ (username, password)
     API->>DB: Validate credentials
-    API->>DB: Generate 6-digit OTP & session_token
+    API->>DB: Generate 6-digit OTP and session_token
     API->>Mail: Send verification email
-    API-->>User: 200 OK {2fa_required: true, session_token, email: "u***@domain.com"}
+    API-->>User: 200 OK (2fa_required, session_token, masked_email)
     
-    User->>API: POST /api/2fa/verify/ {session_token, otp}
-    API->>DB: Verify code, expiry, and attempt limits
+    User->>API: POST /api/2fa/verify/ (session_token, otp)
+    API->>DB: Verify OTP, expiry, and attempt count
     API->>DB: Invalidate OTP (is_used = true)
-    API-->>User: 200 OK {access: "JWT...", refresh: "JWT...", user: {...}}
+    API-->>User: 200 OK (JWT access, refresh, user details)
 ```
 
 ### 2. GitHub AST Parsing & AI Ticket Generation
@@ -181,23 +204,23 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor Dev as Developer
-    participant View as TaskViewSet / ProjectViewSet
+    participant View as API Views
     participant TS as Tree-sitter Parser
     participant GH as GitHub API
     participant AI as Gemini 3.6 Flash
-    participant DB as Database
+    participant DB as SQLite Database
     
-    Dev->>View: Sync Repo (POST /api/projects/{id}/sync_repo/)
-    View->>GH: Fetch repository file tree (.py, .js, .ts, etc.)
-    View->>TS: Parse AST & extract class/function declarations
-    View->>DB: Save ast_outline to Project
+    Dev->>View: Sync Repo (POST /api/projects/id/sync_repo/)
+    View->>GH: Fetch repository file tree
+    View->>TS: Parse AST & extract class/function symbols
+    View->>DB: Save AST outline to Project
     
-    Dev->>View: Generate Task (POST /api/tasks/gen/) {text: "Add login rate limiter", project_id: 1}
-    View->>DB: Retrieve project.ast_outline
-    View->>AI: Prompt Gemini with AST context, user prompt, and timezone
-    AI-->>View: Structured JSON (TaskCreate schema)
-    View->>DB: Save Task with technical subtasks assigned to specific files
-    View-->>Dev: 201 Created {"message": "Task created successfully"}
+    Dev->>View: Generate Task (POST /api/tasks/gen/)
+    View->>DB: Retrieve project AST outline
+    View->>AI: Prompt Gemini with AST context and user instructions
+    AI-->>View: Structured JSON task schema
+    View->>DB: Save Task with technical subtasks assigned to files
+    View-->>Dev: 201 Created (Task created successfully)
 ```
 
 ---
