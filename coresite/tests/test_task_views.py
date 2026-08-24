@@ -1,0 +1,185 @@
+from unittest.mock import patch
+import pytest
+from django.contrib.auth.models import User
+from django.test import RequestFactory
+from django.utils import timezone
+from rest_framework import status
+
+from coresite.models import Project, Task, Weather
+from coresite.views.task_views import (
+    ProjectViewSet,
+    TaskViewSet,
+    UserDetail,
+    UserList,
+    task_interface,
+)
+
+
+@pytest.mark.django_db
+def test_task_viewset_crud(auth_client, test_user, sample_project):
+    # Create
+    create_payload = {
+        "title": "New Test Task",
+        "description": "Task description here",
+        "ticket_type": "bug",
+        "project": sample_project.id,
+    }
+    create_resp = auth_client.post("/api/tasks/", create_payload)
+    assert create_resp.status_code == status.HTTP_201_CREATED
+    task_id = create_resp.json()["id"]
+
+    # List
+    list_resp = auth_client.get("/api/tasks/")
+    assert list_resp.status_code == status.HTTP_200_OK
+    assert any(t["id"] == task_id for t in list_resp.json())
+
+    # Retrieve
+    retrieve_resp = auth_client.get(f"/api/tasks/{task_id}/")
+    assert retrieve_resp.status_code == status.HTTP_200_OK
+    assert retrieve_resp.json()["title"] == "New Test Task"
+
+    # Update (PUT)
+    put_payload = {
+        "title": "Updated Task Title",
+        "description": "Updated description",
+        "ticket_type": "chore",
+        "completed": True,
+        "project": sample_project.id,
+    }
+    put_resp = auth_client.put(f"/api/tasks/{task_id}/", put_payload)
+    assert put_resp.status_code == status.HTTP_200_OK
+    assert put_resp.json()["title"] == "Updated Task Title"
+    assert put_resp.json()["completed"] is True
+
+    # Partial Update (PATCH)
+    patch_resp = auth_client.patch(f"/api/tasks/{task_id}/", {"completed": False})
+    assert patch_resp.status_code == status.HTTP_200_OK
+    assert patch_resp.json()["completed"] is False
+
+    # Delete
+    delete_resp = auth_client.delete(f"/api/tasks/{task_id}/")
+    assert delete_resp.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.mark.django_db
+def test_task_viewset_swagger_fake_view(test_user):
+    view = TaskViewSet()
+    view.swagger_fake_view = True
+    assert view.get_queryset().count() == 0
+
+
+@pytest.mark.django_db
+def test_project_viewset_crud_and_autosync(auth_client, test_user):
+    # Create with github_repo triggering auto-sync
+    with patch("coresite.views.task_views.sync_project_ast", return_value="Sync successful") as mock_sync:
+        create_resp = auth_client.post("/api/projects/", {
+            "name": "Sync Project",
+            "github_repo": "owner/repo",
+            "github_token": "token123",
+        })
+        assert create_resp.status_code == status.HTTP_201_CREATED
+        project_id = create_resp.json()["id"]
+        assert mock_sync.called
+
+    # Create with auto-sync raising exception
+    with patch("coresite.views.task_views.sync_project_ast", side_effect=Exception("Network error")):
+        create_resp2 = auth_client.post("/api/projects/", {
+            "name": "Failing Sync Project",
+            "github_repo": "owner/failing-repo",
+        })
+        assert create_resp2.status_code == status.HTTP_201_CREATED
+
+    # List
+    list_resp = auth_client.get("/api/projects/")
+    assert list_resp.status_code == status.HTTP_200_OK
+    assert any(p["id"] == project_id for p in list_resp.json())
+
+    # Retrieve
+    retrieve_resp = auth_client.get(f"/api/projects/{project_id}/")
+    assert retrieve_resp.status_code == status.HTTP_200_OK
+    assert retrieve_resp.json()["name"] == "Sync Project"
+
+    # Partial update
+    patch_resp = auth_client.patch(f"/api/projects/{project_id}/", {"name": "Renamed Project"})
+    assert patch_resp.status_code == status.HTTP_200_OK
+    assert patch_resp.json()["name"] == "Renamed Project"
+
+    # Put update
+    put_resp = auth_client.put(f"/api/projects/{project_id}/", {"name": "Full Put Renamed"})
+    assert put_resp.status_code == status.HTTP_200_OK
+
+    # Delete
+    delete_resp = auth_client.delete(f"/api/projects/{project_id}/")
+    assert delete_resp.status_code == status.HTTP_204_NO_CONTENT
+
+
+@pytest.mark.django_db
+def test_project_viewset_swagger_fake_view():
+    view = ProjectViewSet()
+    view.swagger_fake_view = True
+    assert view.get_queryset().count() == 0
+
+
+@pytest.mark.django_db
+def test_project_sync_repo_endpoint_success(auth_client, sample_project):
+    with patch("coresite.views.task_views.sync_project_ast", return_value="Sync successful"):
+        sample_project.ast_outline = "File: main.py\n  class App"
+        sample_project.save()
+
+        response = auth_client.post(f"/api/projects/{sample_project.id}/sync_repo/", {
+            "github_token": "custom_token"
+        })
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert data["status"] == "success"
+        assert "main.py" in data["ast_preview"]
+
+
+@pytest.mark.django_db
+def test_project_sync_repo_endpoint_failure_message(auth_client, sample_project):
+    with patch("coresite.views.task_views.sync_project_ast", return_value="Failed to fetch files or repository is empty."):
+        response = auth_client.post(f"/api/projects/{sample_project.id}/sync_repo/")
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert "Failed" in response.json()["error"]
+
+
+@pytest.mark.django_db
+def test_project_sync_repo_endpoint_exception(auth_client, sample_project):
+    with patch("coresite.views.task_views.sync_project_ast", side_effect=Exception("Connection timed out")):
+        response = auth_client.post(f"/api/projects/{sample_project.id}/sync_repo/")
+        assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
+        assert "Connection timed out" in response.json()["error"]
+
+
+@pytest.mark.django_db
+def test_task_interface_view(rf: RequestFactory):
+    request = rf.get("/tasks/")
+
+    # Case 1: 0 weather records
+    Weather.objects.all().delete()
+    resp1 = task_interface(request)
+    assert resp1.status_code == 200
+
+    # Case 2: 2 weather records (< 5)
+    now = timezone.now()
+    Weather.objects.create(temp=20.0, time=now, weather="Sunny", weather_code=0)
+    Weather.objects.create(temp=18.0, time=now, weather="Cloudy", weather_code=2)
+    resp2 = task_interface(request)
+    assert resp2.status_code == 200
+
+    # Case 3: 6 weather records (>= 5)
+    for i in range(4):
+        Weather.objects.create(temp=15.0 + i, time=now, weather="Rain", weather_code=61)
+    resp3 = task_interface(request)
+    assert resp3.status_code == 200
+
+
+@pytest.mark.django_db
+def test_user_list_and_detail(auth_client, test_user):
+    list_resp = auth_client.get("/api/users/")
+    assert list_resp.status_code == status.HTTP_200_OK
+    assert any(u["id"] == test_user.id for u in list_resp.json())
+
+    detail_resp = auth_client.get(f"/api/users/{test_user.id}/")
+    assert detail_resp.status_code == status.HTTP_200_OK
+    assert detail_resp.json()["username"] == test_user.username

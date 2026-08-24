@@ -14,6 +14,11 @@ from .auth_views import (
     Verify2FAView,
     mask_email,
 )
+from .calendar_views import (
+    CalendarTokenView,
+    RefreshCalendarTokenView,
+    user_calendar_feed,
+)
 
 __all__ = [
     "TaskViewSet",
@@ -28,4 +33,8 @@ __all__ = [
     "Verify2FAView",
     "Resend2FAView",
     "mask_email",
+    "user_calendar_feed",
+    "CalendarTokenView",
+    "RefreshCalendarTokenView",
 ]
+

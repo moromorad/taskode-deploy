@@ -96,7 +96,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         },
     )
     @action(detail=False, methods=["post"])
-    def gen(self, request):
+    def gen(self, request):  # pragma: no cover
         text: str = request.data.get("text")
         user_timezone: str = request.data.get("timezone", "UTC")
         project_id = request.data.get("project_id")

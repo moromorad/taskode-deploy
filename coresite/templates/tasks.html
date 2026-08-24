@@ -453,7 +453,10 @@
                 <div id="task-list">
                     <p style="color: var(--text-muted); text-align: center; padding: 20px;">Loading tasks...</p>
                 </div>
-                <button id="logout-btn" class="btn-secondary" style="margin-top: 20px;">Logout</button>
+                <div style="display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap;">
+                    <button id="open-calendar-modal-btn" class="btn-secondary">📅 Sync to Calendar</button>
+                    <button id="logout-btn" class="btn-secondary">Logout</button>
+                </div>
             </div>
             
             <!-- Right Panel: AI Tasks -->
@@ -528,6 +531,46 @@
         <pre id="ast-content" style="padding: 15px; border-radius: var(--radius-sm); overflow-x: auto; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; max-height: 60vh; overflow-y: auto;"></pre>
     </dialog>
 
+    <!-- Calendar Sync Modal -->
+    <dialog id="calendar-modal" style="max-width: 600px; width: 92%;">
+        <div class="modal-header">
+            <h3>📅 Sync Tasks to Calendar / Reminders</h3>
+            <button class="close-btn" id="close-calendar-modal">&times;</button>
+        </div>
+        <div style="font-size: 0.9em; color: var(--text-secondary); margin-bottom: 16px; line-height: 1.5;">
+            Subscribe to your live tasks feed in <strong>Google Calendar</strong>, <strong>Apple Calendar / Reminders</strong>, or <strong>Outlook</strong>. Any task with a deadline will automatically sync.
+        </div>
+
+        <div class="form-group">
+            <label for="calendar-feed-url">Your Private iCalendar Feed URL</label>
+            <div style="display: flex; gap: 8px;">
+                <input type="text" id="calendar-feed-url" readonly style="font-family: monospace; font-size: 0.85em; background: #0f1115;" onclick="this.select();">
+                <button type="button" id="copy-calendar-url-btn" class="btn-primary" style="white-space: nowrap; padding: 8px 14px;">Copy</button>
+            </div>
+            <span id="calendar-copy-status" style="font-size: 0.8em; color: var(--success); display: none; margin-top: 4px;">✓ Copied to clipboard!</span>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+            <a id="download-ics-btn" href="#" download class="btn-success" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 10px; font-size: 0.88em; text-align: center;">📥 Download .ics File</a>
+            <a id="webcal-subscribe-btn" href="#" class="btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 10px; font-size: 0.88em; text-align: center;">🍏 Open in Apple Calendar</a>
+            <a href="https://calendar.google.com/calendar/r/settings/addbyurl" target="_blank" rel="noopener noreferrer" class="btn-secondary" style="text-decoration: none; display: inline-flex; align-items: center; justify-content: center; flex: 1; padding: 10px; font-size: 0.88em; text-align: center;">🌐 Google Calendar Settings</a>
+        </div>
+
+        <div style="background: #0f1115; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 14px; margin-bottom: 18px; font-size: 0.85em; color: var(--text-secondary);">
+            <div style="font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">📖 Setup Instructions:</div>
+            <ul style="padding-left: 18px; line-height: 1.6;">
+                <li><strong>Apple Calendar (macOS):</strong> Open the <strong>Calendar</strong> app on your Mac ➔ Press <kbd>Option</kbd> + <kbd>Cmd</kbd> + <kbd>S</kbd> (or <em>File ➔ New Calendar Subscription</em>) ➔ Paste your Feed URL ➔ Click <strong>Subscribe</strong>.</li>
+                <li><strong>Google Calendar:</strong> Copy your Feed URL ➔ Go to Google Calendar <em>Settings ➔ Add from URL</em> (or import the downloaded <code>.ics</code> file).</li>
+                <li><strong>Outlook:</strong> Go to <em>Add Calendar ➔ Subscribe from web</em> and paste the URL.</li>
+            </ul>
+        </div>
+
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border); padding-top: 14px;">
+            <button type="button" id="refresh-calendar-token-btn" class="btn-danger" style="font-size: 0.82em; padding: 6px 12px;">🔄 Regenerate Private Link</button>
+            <span style="font-size: 0.78em; color: var(--text-muted);">Only share with your own devices</span>
+        </div>
+    </dialog>
+
     <script>
         const apiBaseUrl = '/api/tasks/';
         const projectsApiUrl = '/api/projects/';
@@ -535,6 +578,8 @@
         const verify2faApiUrl = '/api/2fa/verify/';
         const resend2faApiUrl = '/api/2fa/resend/';
         const registerApiUrl = '/api/register/';
+        const calendarTokenApiUrl = '/api/calendar/token/';
+        const calendarRefreshApiUrl = '/api/calendar/token/refresh/';
         
         const authSection = document.getElementById('auth-section');
         const authTabs = document.querySelector('.auth-tabs');
@@ -582,6 +627,17 @@
         const deleteProjectBtn = document.getElementById('delete-project-btn');
         const closeAstModalBtn = document.getElementById('close-ast-modal');
         const astContent = document.getElementById('ast-content');
+
+        // Calendar Sync Modal Elements
+        const calendarModal = document.getElementById('calendar-modal');
+        const openCalendarModalBtn = document.getElementById('open-calendar-modal-btn');
+        const closeCalendarModalBtn = document.getElementById('close-calendar-modal');
+        const calendarFeedUrlInput = document.getElementById('calendar-feed-url');
+        const copyCalendarUrlBtn = document.getElementById('copy-calendar-url-btn');
+        const calendarCopyStatus = document.getElementById('calendar-copy-status');
+        const webcalSubscribeBtn = document.getElementById('webcal-subscribe-btn');
+        const downloadIcsBtn = document.getElementById('download-ics-btn');
+        const refreshCalendarTokenBtn = document.getElementById('refresh-calendar-token-btn');
 
         // Track which tasks have their subtask list expanded
         const expandedTasks = new Set();
@@ -1055,6 +1111,74 @@
                 console.error("Error creating project:", error);
                 projectError.textContent = "An error occurred.";
                 projectError.style.display = 'block';
+            }
+        });
+
+        // ----- CALENDAR SYNC MODAL -----
+
+        async function fetchCalendarSubscription() {
+            try {
+                const response = await fetch(calendarTokenApiUrl, {
+                    headers: getAuthHeaders()
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    calendarFeedUrlInput.value = data.feed_url;
+                    webcalSubscribeBtn.href = data.webcal_url;
+                    downloadIcsBtn.href = data.feed_url;
+                } else if (response.status === 401) {
+                    logoutBtn.click();
+                }
+            } catch (error) {
+                console.error("Error fetching calendar token:", error);
+            }
+        }
+
+        openCalendarModalBtn.addEventListener('click', async () => {
+            calendarModal.showModal();
+            calendarCopyStatus.style.display = 'none';
+            calendarFeedUrlInput.value = "Loading your feed URL...";
+            await fetchCalendarSubscription();
+        });
+
+        closeCalendarModalBtn.addEventListener('click', () => {
+            calendarModal.close();
+        });
+
+        copyCalendarUrlBtn.addEventListener('click', async () => {
+            if (!calendarFeedUrlInput.value || calendarFeedUrlInput.value.startsWith("Loading")) return;
+            try {
+                await navigator.clipboard.writeText(calendarFeedUrlInput.value);
+                calendarCopyStatus.style.display = 'inline-block';
+                setTimeout(() => { calendarCopyStatus.style.display = 'none'; }, 3000);
+            } catch (err) {
+                calendarFeedUrlInput.select();
+                document.execCommand('copy');
+                calendarCopyStatus.style.display = 'inline-block';
+                setTimeout(() => { calendarCopyStatus.style.display = 'none'; }, 3000);
+            }
+        });
+
+        refreshCalendarTokenBtn.addEventListener('click', async () => {
+            if (!confirm("Are you sure you want to regenerate your private calendar link? Any existing Google Calendar or Apple Reminders subscriptions will stop updating until you update them with the new link.")) {
+                return;
+            }
+            try {
+                const response = await fetch(calendarRefreshApiUrl, {
+                    method: 'POST',
+                    headers: getAuthHeaders()
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    calendarFeedUrlInput.value = data.feed_url;
+                    webcalSubscribeBtn.href = data.webcal_url;
+                    downloadIcsBtn.href = data.feed_url;
+                    alert("Calendar token regenerated successfully! Please update your calendar subscriptions with the new URL.");
+                } else if (response.status === 401) {
+                    logoutBtn.click();
+                }
+            } catch (error) {
+                console.error("Error regenerating calendar token:", error);
             }
         });
 

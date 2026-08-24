@@ -98,3 +98,10 @@ watchfiles==1.2.0
 wcwidth==0.8.2
 websockets==16.1.1
 whitenoise==6.6.0
+icalendar==7.3.0
+coverage==7.15.4
+iniconfig==2.3.0
+pluggy==1.6.0
+pytest==9.1.1
+pytest-cov==7.1.0
+pytest-django==4.14.0

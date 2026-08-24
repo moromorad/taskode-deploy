@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.db import models
-from django.db.models.signals import post_delete
+from django.db.models.signals import post_delete, post_save
 from django.dispatch import receiver
 from django.utils import timezone
 
@@ -139,6 +139,41 @@ class EmailOTP(models.Model):
         )
     
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(
+        User, on_delete=models.CASCADE, related_name="profile"
+    )
+    calendar_token = models.CharField(
+        max_length=64, unique=True, db_index=True
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Profile for {self.user.username}"
+
+    @classmethod
+    def get_or_create_for_user(cls, user: User) -> "UserProfile":
+        profile = cls.objects.filter(user=user).first()
+        if not profile:
+            profile = cls.objects.create(
+                user=user,
+                calendar_token=uuid.uuid4().hex,
+            )
+        return profile
+
+    def refresh_calendar_token(self) -> str:
+        self.calendar_token = uuid.uuid4().hex
+        self.save(update_fields=["calendar_token"])
+        return self.calendar_token
+
+
+# Signal to auto-create a UserProfile with calendar_token on User creation
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.get_or_create_for_user(instance)
+
+
 # 1. We use the @receiver decorator to tell Django to listen for 'post_delete' on the 'Task' model
 @receiver(post_delete, sender=Task)
 def notify_task_deleted(sender, instance, **kwargs):
@@ -146,3 +181,4 @@ def notify_task_deleted(sender, instance, **kwargs):
     print("\n-------------------------------------------------------------")
     print(f"💥 SIGNAL ALARM: The task '{instance.title}' was just deleted!")
     print("-------------------------------------------------------------\n")
+

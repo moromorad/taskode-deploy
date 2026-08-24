@@ -67,7 +67,6 @@ celerybeat.pid
 # =========================
 .coverage
 .coverage.*
-.coveragerc
 nosetests.xml
 coverage.xml
 *.cover

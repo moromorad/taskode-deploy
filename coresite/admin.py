@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
-from .models import Task, Weather, Project, EmailOTP
+from .models import Task, Weather, Project, EmailOTP, UserProfile
 
 # This registers your model so it shows up in the admin dashboard
 @admin.register(Task)
@@ -31,3 +31,8 @@ class EmailOTPAdmin(admin.ModelAdmin):
     list_display = ('user', 'otp_code', 'session_token', 'created_at', 'expires_at', 'attempts', 'is_used')
     list_filter = ('is_used', 'created_at')
     search_fields = ('user__username', 'user__email', 'session_token')
+
+@admin.register(UserProfile)
+class UserProfileAdmin(admin.ModelAdmin):
+    list_display = ('user', 'calendar_token', 'created_at')
+    search_fields = ('user__username', 'user__email', 'calendar_token')

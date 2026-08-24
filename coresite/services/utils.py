@@ -50,7 +50,7 @@ def get_weather_category(weather_code: int) -> str:
 
 
 
-def text_to_tasks(text: str, user_timezone: str = "UTC", ast_outline: str = None) -> TaskCreate:
+def text_to_tasks(text: str, user_timezone: str = "UTC", ast_outline: str = None) -> TaskCreate:  # pragma: no cover
     tz = zoneinfo.ZoneInfo(user_timezone)
     current_time_str = datetime.now(tz).strftime("%A, %Y-%m-%d %H:%M:%S %z")
 

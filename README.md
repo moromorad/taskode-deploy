@@ -165,7 +165,13 @@ Manages Two-Factor Authentication codes.
 - `attempts` (IntegerField): Failed verification attempts counter (max 5).
 - `is_used` (BooleanField): Status flag to prevent replay attacks.
 
-### 4. `Weather`
+### 4. `UserProfile`
+Stores user settings and private subscription tokens for external calendar integrations.
+- `user` (OneToOneField -> `User`): Targeted user account.
+- `calendar_token` (CharField): Private 64-character token used for authenticating `.ics` feed subscriptions.
+- `created_at` (DateTimeField): Timestamp when profile was created.
+
+### 5. `Weather`
 Stores scheduled weather records for dashboard telemetry.
 - `temp` (FloatField): Temperature in Celsius.
 - `time` (DateTimeField): Measurement timestamp.
@@ -237,6 +243,14 @@ sequenceDiagram
 | `POST` | `/api/2fa/resend/` | Resend new OTP code using active session token | `{"session_token"}` |
 | `POST` | `/api/token/` | Direct JWT token obtain (bypasses 2FA, throttled) | `{"username", "password"}` |
 | `POST` | `/api/token/refresh/` | Refresh expired JWT access token | `{"refresh"}` |
+
+### 📅 Calendar & Reminders Sync (`/api/calendar/`)
+
+| Method | Endpoint | Description | Auth Required |
+| :--- | :--- | :--- | :--- |
+| `GET` | `/api/calendar/feed/<token>.ics` | Public iCalendar (`.ics`) feed for Google / Apple Calendar | No (URL Token) |
+| `GET` | `/api/calendar/token/` | Get authenticated user's private feed and webcal URLs | Yes (JWT) |
+| `POST` | `/api/calendar/token/refresh/` | Invalidate previous URL and generate a new private token | Yes (JWT) |
 
 ### 📋 Tasks (`/api/tasks/`)
 
@@ -382,8 +396,14 @@ uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ## 🧪 Testing & Validation
 
 ```bash
-# Run Django unit tests
-python manage.py test
+# Run pytest suite
+pytest
+
+# Run pytest with terminal code coverage report
+pytest --cov=coresite --cov-report=term-missing
+
+# Generate HTML code coverage report (saved to htmlcov/index.html)
+pytest --cov=coresite --cov-report=html
 
 # Validate OpenAPI schema generation
 python manage.py spectacular --validate --file /dev/null
@@ -391,6 +411,10 @@ python manage.py spectacular --validate --file /dev/null
 # Run type checker
 mypy coresite/
 ```
+
+### 🔍 VS Code Testing Panel
+Tests can also be discovered, executed, and debugged directly in the VS Code **Testing** side panel (`pytest` is configured in `.vscode/settings.json`).
+
 
 ---
 
