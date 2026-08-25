@@ -370,11 +370,10 @@ def test_pack_file_ast_blocks_end_of_file_tail_stitching():
     assert chunks[0]["end_line"] == 25
 
 
-def test_pack_file_ast_blocks_pre_massive_function_stitching():
-    # 250 lines -> ~1000 tokens (> max_tokens 500)
-    massive_code = "public void massiveAlgorithm() {\n" + "    stepOperation();\n" * 250 + "}"
+def test_pack_file_ast_blocks_pre_massive_function_isolation():
+    massive_code = "public void massiveAlgorithm() {\n" + "    complexStep();\n" * 250 + "}"
     blocks = [
-        # 15-token helper
+        # Small helper (15 tokens)
         {
             "filepath": "src/MathEngine.java",
             "symbol_type": "Function",
@@ -392,11 +391,14 @@ def test_pack_file_ast_blocks_pre_massive_function_stitching():
         },
     ]
     chunks = pack_file_ast_blocks(blocks, target_tokens=300, tolerance=50, max_tokens=500)
-    assert len(chunks) > 1
-    # Part 1 starts with the 15-token helper prepended
+    assert len(chunks) >= 3
+    # Chunk 0 is the clean standalone helper
     assert "getPi" in chunks[0]["text"]
-    assert "massiveAlgorithm" in chunks[0]["text"]
-    assert "Part 1" in chunks[0]["symbol_type"]
+    assert "massiveAlgorithm" not in chunks[0]["text"]
+    # Chunk 1 is Part 1 of the massive algorithm
+    assert "massiveAlgorithm" in chunks[1]["text"]
+    assert "getPi" not in chunks[1]["text"]
+    assert "Part 1" in chunks[1]["symbol_type"]
 
 
 def test_pack_file_ast_blocks_tail_stitching_exceeds_ceiling_emits_separate():

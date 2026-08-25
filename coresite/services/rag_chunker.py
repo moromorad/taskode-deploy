@@ -303,37 +303,26 @@ def pack_file_ast_blocks(
         b_tokens = get_token_count(block["code"])
 
         # Case 1: Oversized function (exceeds elastic ceiling > 750)
+        # Always isolate massive algorithms into their own clean boundary
         if config.is_oversized_function(b_tokens):
-            if current_tokens >= config.soft_pack_min:
+            if current_pack:
                 flush_pack()
-                combined_massive_code = block["code"]
-                massive_start_line = block["start_line"]
-            elif current_pack:
-                first_pack_b = current_pack[0]
-                leftover_code = "\n\n".join(b["code"] for b in current_pack)
-                combined_massive_code = leftover_code + "\n\n" + block["code"]
-                massive_start_line = first_pack_b["start_line"]
-                current_pack = []
-                current_tokens = 0
-            else:
-                combined_massive_code = block["code"]
-                massive_start_line = block["start_line"]
 
             enclosing_cls = get_enclosing_class_signature(block, class_blocks)
             header = format_chunk_header(
                 block["filepath"],
                 block["symbol_type"],
-                massive_start_line,
+                block["start_line"],
                 block["end_line"],
                 enclosing_class=enclosing_cls,
             )
             slices = split_oversized_code_with_bpe(
-                combined_massive_code, max_tokens=config.bpe_slice_size, overlap=config.bpe_overlap
+                block["code"], max_tokens=config.bpe_slice_size, overlap=config.bpe_overlap
             )
             for i, slice_code in enumerate(slices, start=1):
                 packed_chunks.append({
                     "filepath": block["filepath"],
-                    "start_line": massive_start_line,
+                    "start_line": block["start_line"],
                     "end_line": block["end_line"],
                     "symbol_type": f"{block['symbol_type']} (Part {i})",
                     "text": header + slice_code,

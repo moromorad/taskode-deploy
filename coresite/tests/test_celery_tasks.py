@@ -127,7 +127,7 @@ def test_index_project_codebase_success(test_user):
         with patch("coresite.tasks.fetch_file_content", side_effect=mock_content):
             with patch("coresite.tasks.extract_ast_code_blocks", return_value=raw_blocks):
                 with patch("coresite.tasks.chunk_with_bpe_guardrails", return_value=final_chunks):
-                    with patch("coresite.tasks.index_project_chunks", return_value=(1, "gemini-embedding-001")) as mock_index:
+                    with patch("coresite.tasks.index_project_chunks", return_value=(1, "gemini-embedding-001", {"cached": 0, "new": 1, "deleted": 0})) as mock_index:
                         result = index_project_codebase(project.id)
                         assert "Successfully indexed 1 chunks" in result
                         assert mock_index.call_count == 1

@@ -123,7 +123,7 @@ To maximize semantic retrieval while strictly respecting API quotas and embeddin
 | **Intact Class Preservation** | **650 tokens** | **Up to $750$ tokens** | $750$ tokens | Classes up to **750 tokens** (fields, constructor, methods) stay unified as 1 intact chunk. |
 | **Standalone Intact Function** | **650 tokens** | **Up to $750$ tokens** | $750$ tokens | Functions up to **750 tokens** stay 100% whole without artificial BPE slicing. |
 | **End-of-File Tail Stitching** | Leftover ($< 250$) | **Combined $\le 750$** | $750$ tokens | If previous chunk + leftover $\le 750$, stitches into tail of previous chunk. If $> 750$, emits as separate chunk. |
-| **Pre-Massive Function Stitch** | Helper ($< 250$) | N/A | Regulated by BPE ($512$) | Small helpers ($< 250$) are prepended to Part 1 of the massive function. Full chunks ($\ge 250$) emit standalone immediately. |
+| **Pre-Massive Function Isolation** | Preceding Buffer | Standalone Chunk | $750$ tokens | Any function/buffer preceding a massive algorithm ($> 750$) is always emitted as its own clean chunk to ensure 100% cache isolation on re-syncs. |
 | **Massive Function Slicing** | **512 tokens** | 64-token overlap | $512$ tokens / slice | Genuine algorithm monsters ($> 750$ tokens) are sliced into overlapping $512$-token pieces. |
 | **API Model Barrier** | N/A | N/A | **2,048 tokens** | Hard model ceiling guardrail to prevent Google API rejection. |
 

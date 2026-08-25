@@ -179,11 +179,16 @@ def index_project_codebase(project_id: int, github_token: str = None) -> str:
             step_text = f"Embedding chunks ({chunk_num}/{total_chunks}) using {model}..."
             update_project_progress(project.id, chunk_pct, "batch_embedding", step_text, log_msg, model=model)
 
-    indexed_count, model_used, diff_stats = index_project_chunks(
+    res = index_project_chunks(
         project.id,
         final_chunks,
         on_progress=on_batch_progress,
     )
+    if len(res) == 3:
+        indexed_count, model_used, diff_stats = res
+    else:
+        indexed_count, model_used = res[0], res[1]
+        diff_stats = {"cached": 0, "new": indexed_count, "deleted": 0}
 
     # Update project state in DB
     project.is_indexed = True
