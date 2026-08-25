@@ -5,10 +5,16 @@ FROM python:3.14-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# 3. Set the directory inside the container where our code will live
+# 3. Install basic build dependencies for native packages (tree-sitter, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
+
+# 4. Set directory inside container
 WORKDIR /app
 
-# 4. Copy the dependencies list first and install them
+# 5. Copy requirements and install
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt
 

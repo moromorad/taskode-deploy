@@ -39,6 +39,8 @@ services:
       - redis
       - web
       - chromadb
+    env_file:
+      - .env
 
   celery_beat:
     build: .
@@ -48,6 +50,8 @@ services:
     depends_on:
       - redis
       - web
+    env_file:
+      - .env
 
 volumes:
   chroma_data:
