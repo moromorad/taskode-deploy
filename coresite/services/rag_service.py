@@ -140,6 +140,20 @@ def embed_code_query(query: str, model: str = PRIMARY_MODEL, output_dim: int = 7
     return normalize_vector(raw_vec)
 
 
+import hashlib
+
+
+def compute_chunk_content_hash(text: str, filepath: str) -> str:
+    """
+    Computes a deterministic SHA-256 hash of a chunk's code and structural context.
+    Strips volatile 'Lines: ...' lines to ensure line-number shifts in other parts
+    of the file do not invalidate unchanged embeddings.
+    """
+    cleaned_lines = [l for l in text.splitlines() if not l.strip().startswith("Lines: ")]
+    canonical_text = f"{filepath}::" + "\n".join(cleaned_lines)
+    return hashlib.sha256(canonical_text.encode("utf-8")).hexdigest()[:16]
+
+
 # ==========================================
 # 2. Vector Storage & Indexing
 # ==========================================
@@ -149,58 +163,112 @@ def index_project_chunks(
     chunks: list[dict[str, Any]],
     preferred_model: str = PRIMARY_MODEL,
     on_progress: Optional[Any] = None,
-) -> tuple[int, str]:
+) -> tuple[int, str, dict[str, int]]:
     """
-    Embeds and stores code chunks in ChromaDB in batches.
-    Returns (chunk_count, model_used).
+    Incrementally embeds and stores code chunks in ChromaDB:
+    1. Reuses existing collection if present.
+    2. Identifies cached (unchanged), new/modified, and obsolete chunks.
+    3. Re-embeds ONLY new or modified chunks.
+    4. Updates line metadata for line shifts without re-embedding.
+    5. Deletes obsolete chunks from ChromaDB.
+    Returns (total_active_chunks, model_used, diff_stats).
     """
+    diff_stats = {"cached": 0, "new": 0, "deleted": 0, "updated_lines": 0}
     if not chunks:
-        return 0, preferred_model
+        return 0, preferred_model, diff_stats
 
     chroma = get_chroma_client()
     collection_name = f"project_{project_id}"
 
-    try:
-        chroma.delete_collection(name=collection_name)
-    except Exception:
-        pass
-
-    collection = chroma.create_collection(
+    collection = chroma.get_or_create_collection(
         name=collection_name,
         metadata={"hnsw:space": "cosine"},
     )
 
-    print(f"[RAG Chroma] Batch embedding {len(chunks)} chunks using {preferred_model}...")
-    vectors, model_used = embed_code_documents_batch(
-        chunks,
-        batch_size=50,
-        model=preferred_model,
-        on_progress=on_progress,
-    )
+    # 1. Fetch existing indexed chunks in this collection
+    existing_ids = set()
+    existing_metas = {}
+    try:
+        existing_data = collection.get(include=["metadatas"])
+        if existing_data and "ids" in existing_data:
+            existing_ids = set(existing_data["ids"])
+            for id_, meta in zip(existing_data["ids"], existing_data.get("metadatas", [])):
+                existing_metas[id_] = meta or {}
+    except Exception as e:
+        print(f"[RAG Chroma] Note: could not fetch existing metadata for {collection_name}: {e}")
 
-    ids = [f"chunk_{project_id}_{idx}" for idx in range(len(chunks))]
-    documents = [chunk["text"] for chunk in chunks]
-    metadatas = [
-        {
+    # 2. Categorize incoming chunks
+    chunks_to_embed = []
+    current_doc_ids = set()
+
+    for chunk in chunks:
+        content_hash = compute_chunk_content_hash(chunk["text"], chunk["filepath"])
+        doc_id = f"chunk_{project_id}_{content_hash}"
+        current_doc_ids.add(doc_id)
+
+        meta = {
             "filepath": chunk["filepath"],
             "symbol_type": chunk.get("symbol_type", ""),
             "start_line": chunk.get("start_line", 0),
             "end_line": chunk.get("end_line", 0),
+            "content_hash": content_hash,
         }
-        for chunk in chunks
-    ]
 
-    collection.add(
-        ids=ids,
-        documents=documents,
-        embeddings=vectors,
-        metadatas=metadatas,
-    )
-    success_log = f"[RAG Chroma] ✅ Successfully indexed {len(chunks)} chunks in '{collection_name}' ({model_used})."
-    print(success_log)
-    if on_progress:
-        on_progress(1, 1, model_used, success_log)
-    return len(chunks), model_used
+        if doc_id in existing_ids:
+            # Cache hit: unchanged code!
+            diff_stats["cached"] += 1
+            old_meta = existing_metas.get(doc_id, {})
+            # If line numbers shifted, update metadata in ChromaDB without re-embedding
+            if (old_meta.get("start_line") != meta["start_line"] or 
+                old_meta.get("end_line") != meta["end_line"]):
+                try:
+                    collection.update(ids=[doc_id], metadatas=[meta])
+                    diff_stats["updated_lines"] += 1
+                except Exception:
+                    pass
+        else:
+            # New or modified code -> needs embedding
+            diff_stats["new"] += 1
+            chunks_to_embed.append({
+                "id": doc_id,
+                "text": chunk["text"],
+                "filepath": chunk["filepath"],
+                "metadata": meta,
+            })
+
+    # 3. Prune obsolete / deleted chunks
+    obsolete_ids = list(existing_ids - current_doc_ids)
+    if obsolete_ids:
+        try:
+            collection.delete(ids=obsolete_ids)
+            diff_stats["deleted"] = len(obsolete_ids)
+            print(f"[RAG Chroma] 🗑️ Pruned {len(obsolete_ids)} obsolete chunks from '{collection_name}'.")
+        except Exception as e:
+            print(f"[RAG Chroma] ⚠️ Failed to prune obsolete chunks: {e}")
+
+    # 4. Embed ONLY new or modified chunks
+    model_used = preferred_model
+    if chunks_to_embed:
+        print(f"[RAG Chroma] ⚡ Diff: Embedding {len(chunks_to_embed)} new/modified chunks (Reusing {diff_stats['cached']} cached)...")
+        vectors, model_used = embed_code_documents_batch(
+            [{"filepath": c["filepath"], "text": c["text"]} for c in chunks_to_embed],
+            batch_size=50,
+            model=preferred_model,
+            on_progress=on_progress,
+        )
+        collection.upsert(
+            ids=[c["id"] for c in chunks_to_embed],
+            documents=[c["text"] for c in chunks_to_embed],
+            embeddings=vectors,
+            metadatas=[c["metadata"] for c in chunks_to_embed],
+        )
+    else:
+        print(f"[RAG Chroma] ⚡ All {len(chunks)} chunks are up to date! (0 new embeddings required).")
+        if on_progress:
+            on_progress(1, 1, model_used, f"⚡ All {len(chunks)} chunks cached. 0 new embeddings needed.")
+
+    total_active_chunks = len(current_doc_ids)
+    return total_active_chunks, model_used, diff_stats
 
 
 # ==========================================

@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from coresite.services.rag_service import (
+    compute_chunk_content_hash,
     embed_code_document,
     embed_code_documents_batch,
     embed_code_query,
@@ -111,10 +112,31 @@ def test_embed_code_query_gemini_001():
 # 3. Vector Indexing Tests
 # ==========================================
 
+def test_compute_chunk_content_hash_deterministic():
+    text1 = "File: app/models.py\nType: Class\nLines: 10-25\n----------------------------------------\nclass Task:\n    pass"
+    text2 = "File: app/models.py\nType: Class\nLines: 15-30\n----------------------------------------\nclass Task:\n    pass"
+    text3 = "File: app/models.py\nType: Class\nLines: 10-25\n----------------------------------------\nclass Project:\n    pass"
+
+    hash1 = compute_chunk_content_hash(text1, "app/models.py")
+    hash2 = compute_chunk_content_hash(text2, "app/models.py")
+    hash3 = compute_chunk_content_hash(text3, "app/models.py")
+
+    # Hash 1 and 2 must match because only volatile line numbers shifted!
+    assert hash1 == hash2
+    # Hash 3 must differ because the code body changed
+    assert hash1 != hash3
+
+
+# ==========================================
+# 3. Vector Indexing Tests
+# ==========================================
+
 def test_index_project_chunks_empty():
-    count, model = index_project_chunks(1, [])
+    count, model, diff_stats = index_project_chunks(1, [])
     assert count == 0
     assert model == "gemini-embedding-001"
+    assert diff_stats["cached"] == 0
+    assert diff_stats["new"] == 0
 
 
 def test_index_project_chunks_success():
@@ -129,19 +151,134 @@ def test_index_project_chunks_success():
     ]
 
     mock_collection = MagicMock()
+    mock_collection.get.return_value = {"ids": [], "metadatas": []}
     mock_chroma = MagicMock()
-    mock_chroma.create_collection.return_value = mock_collection
+    mock_chroma.get_or_create_collection.return_value = mock_collection
 
     with patch("coresite.services.rag_service.get_chroma_client", return_value=mock_chroma):
-        with patch("coresite.services.rag_service.embed_code_documents_batch", return_value=([[0.1, 0.2]], "gemini-embedding-2")):
-            count, model_used = index_project_chunks(42, chunks)
+        with patch("coresite.services.rag_service.embed_code_documents_batch", return_value=([[0.1, 0.2]], "gemini-embedding-001")):
+            count, model_used, diff_stats = index_project_chunks(42, chunks)
             assert count == 1
-            assert model_used == "gemini-embedding-2"
-            mock_chroma.create_collection.assert_called_once_with(
+            assert model_used == "gemini-embedding-001"
+            assert diff_stats["new"] == 1
+            assert diff_stats["cached"] == 0
+            mock_chroma.get_or_create_collection.assert_called_once_with(
                 name="project_42",
                 metadata={"hnsw:space": "cosine"},
             )
-            mock_collection.add.assert_called_once()
+            mock_collection.upsert.assert_called_once()
+
+
+def test_index_project_chunks_incremental_all_cached():
+    text = "File: coresite/models.py\nclass Task:\n    pass"
+    content_hash = compute_chunk_content_hash(text, "coresite/models.py")
+    doc_id = f"chunk_42_{content_hash}"
+
+    chunks = [
+        {
+            "filepath": "coresite/models.py",
+            "symbol_type": "Class",
+            "start_line": 10,
+            "end_line": 20,
+            "text": text,
+        },
+    ]
+
+    mock_collection = MagicMock()
+    # Existing collection already has this doc_id!
+    mock_collection.get.return_value = {
+        "ids": [doc_id],
+        "metadatas": [{"filepath": "coresite/models.py", "start_line": 10, "end_line": 20}],
+    }
+    mock_chroma = MagicMock()
+    mock_chroma.get_or_create_collection.return_value = mock_collection
+
+    with patch("coresite.services.rag_service.get_chroma_client", return_value=mock_chroma):
+        with patch("coresite.services.rag_service.embed_code_documents_batch") as mock_embed:
+            count, model_used, diff_stats = index_project_chunks(42, chunks)
+            assert count == 1
+            assert diff_stats["cached"] == 1
+            assert diff_stats["new"] == 0
+            assert diff_stats["deleted"] == 0
+            # 0 API calls! embed_code_documents_batch is never called!
+            mock_embed.assert_not_called()
+            mock_collection.upsert.assert_not_called()
+
+
+def test_index_project_chunks_incremental_partial_diff():
+    # Chunk 1 (unchanged)
+    text1 = "File: app/a.py\ndef func_a(): pass"
+    hash1 = compute_chunk_content_hash(text1, "app/a.py")
+    doc_id1 = f"chunk_42_{hash1}"
+
+    # Chunk 2 (new)
+    text2 = "File: app/b.py\ndef func_b_new(): pass"
+
+    # Obsolete chunk in ChromaDB
+    obsolete_id = "chunk_42_old_obsolete_hash"
+
+    chunks = [
+        {"filepath": "app/a.py", "symbol_type": "Function", "start_line": 1, "end_line": 2, "text": text1},
+        {"filepath": "app/b.py", "symbol_type": "Function", "start_line": 5, "end_line": 10, "text": text2},
+    ]
+
+    mock_collection = MagicMock()
+    mock_collection.get.return_value = {
+        "ids": [doc_id1, obsolete_id],
+        "metadatas": [
+            {"filepath": "app/a.py", "start_line": 1, "end_line": 2},
+            {"filepath": "app/old.py", "start_line": 1, "end_line": 5},
+        ],
+    }
+    mock_chroma = MagicMock()
+    mock_chroma.get_or_create_collection.return_value = mock_collection
+
+    with patch("coresite.services.rag_service.get_chroma_client", return_value=mock_chroma):
+        with patch("coresite.services.rag_service.embed_code_documents_batch", return_value=([[0.5, 0.5]], "gemini-embedding-001")) as mock_embed:
+            count, model_used, diff_stats = index_project_chunks(42, chunks)
+            assert count == 2
+            assert diff_stats["cached"] == 1
+            assert diff_stats["new"] == 1
+            assert diff_stats["deleted"] == 1
+            # Only chunk 2 was sent to Gemini
+            assert mock_embed.call_count == 1
+            assert len(mock_embed.call_args[0][0]) == 1
+            assert mock_embed.call_args[0][0][0]["filepath"] == "app/b.py"
+            # Obsolete chunk was pruned
+            mock_collection.delete.assert_called_once_with(ids=[obsolete_id])
+
+
+def test_index_project_chunks_line_shift_metadata_update():
+    text_old_lines = "File: app/a.py\nLines: 10-20\n----------------------------------------\ndef func_a(): pass"
+    text_new_lines = "File: app/a.py\nLines: 15-25\n----------------------------------------\ndef func_a(): pass"
+
+    # Same content hash because code is identical
+    content_hash = compute_chunk_content_hash(text_new_lines, "app/a.py")
+    doc_id = f"chunk_42_{content_hash}"
+
+    chunks = [
+        {"filepath": "app/a.py", "symbol_type": "Function", "start_line": 15, "end_line": 25, "text": text_new_lines},
+    ]
+
+    mock_collection = MagicMock()
+    mock_collection.get.return_value = {
+        "ids": [doc_id],
+        "metadatas": [{"filepath": "app/a.py", "start_line": 10, "end_line": 20}],
+    }
+    mock_chroma = MagicMock()
+    mock_chroma.get_or_create_collection.return_value = mock_collection
+
+    with patch("coresite.services.rag_service.get_chroma_client", return_value=mock_chroma):
+        with patch("coresite.services.rag_service.embed_code_documents_batch") as mock_embed:
+            count, model_used, diff_stats = index_project_chunks(42, chunks)
+            assert count == 1
+            assert diff_stats["cached"] == 1
+            assert diff_stats["updated_lines"] == 1
+            assert diff_stats["new"] == 0
+            # 0 API calls
+            mock_embed.assert_not_called()
+            # Metadata updated with new lines
+            mock_collection.update.assert_called_once()
 
 
 # ==========================================

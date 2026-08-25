@@ -179,7 +179,7 @@ def index_project_codebase(project_id: int, github_token: str = None) -> str:
             step_text = f"Embedding chunks ({chunk_num}/{total_chunks}) using {model}..."
             update_project_progress(project.id, chunk_pct, "batch_embedding", step_text, log_msg, model=model)
 
-    indexed_count, model_used = index_project_chunks(
+    indexed_count, model_used, diff_stats = index_project_chunks(
         project.id,
         final_chunks,
         on_progress=on_batch_progress,
@@ -192,14 +192,15 @@ def index_project_codebase(project_id: int, github_token: str = None) -> str:
     project.embedding_model = model_used
     project.save(update_fields=["is_indexed", "last_indexed_at", "collection_name", "embedding_model"])
 
-    success_msg = f"Successfully indexed {indexed_count} chunks for '{project.name}' into ChromaDB using {model_used}."
+    diff_summary = f"{diff_stats['cached']} cached, {diff_stats['new']} embedded, {diff_stats['deleted']} pruned"
+    success_msg = f"Successfully indexed {indexed_count} chunks ({diff_summary}) for '{project.name}' into ChromaDB using {model_used}."
     success_log = f"[RAG Indexing] ✅ {success_msg}\n"
     print(success_log)
     update_project_progress(
         project.id,
         100,
         "completed",
-        "Indexing complete and ready for AI generation!",
+        f"Indexing complete! ({diff_summary})",
         success_log,
         model=model_used,
         chunk_count=indexed_count,
