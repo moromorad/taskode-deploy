@@ -43,9 +43,9 @@ flowchart TD
     end
 
     subgraph DataStore["Data & Vector Stores"]
-        Redis[("Redis (Broker & Cache)")]
+        Redis[("Redis Broker & Cache")]
         DB[("SQLite Database")]
-        ChromaDB[("ChromaDB Vector Store (Port 8000)")]
+        ChromaDB[("ChromaDB Vector Store")]
     end
 
     subgraph External["External APIs & Models"]
@@ -55,7 +55,7 @@ flowchart TD
         OpenMeteo["Open-Meteo Weather API"]
     end
 
-    Client -->|HTTP / SPA UI| Gunicorn
+    Client -->|"HTTP / SPA UI"| Gunicorn
     Gunicorn --> DRF
     Gunicorn --> FastAPI
     Gunicorn --> Swagger
@@ -68,19 +68,19 @@ flowchart TD
     DRF --> DB
     DRF --> Redis
     
-    RAGEngine -->|Query Embedding| GeminiEmbed
-    RAGEngine -->|Vector Search (Top-4)| ChromaDB
-    TaskAI -->|Prompt with Code Context| GeminiFlash
+    RAGEngine -->|"Query Embedding"| GeminiEmbed
+    RAGEngine -->|"Vector Search (Top-4)"| ChromaDB
+    TaskAI -->|"Prompt with Code Context"| GeminiFlash
     
-    DRF -->|Dispatch Index Task| CeleryWorker
+    DRF -->|"Dispatch Index Task"| CeleryWorker
     CeleryWorker --> IndexTask
-    IndexTask -->|Fetch Code Tree| GitHub
-    IndexTask -->|AST Parse & Pack| IndexTask
-    IndexTask -->|Batch Embed (MRL 768)| GeminiEmbed
-    IndexTask -->|Store Vectors & Metadata| ChromaDB
-    IndexTask -->|Stream Logs & Progress| Redis
+    IndexTask -->|"Fetch Code Tree"| GitHub
+    IndexTask -->|"AST Parse & Pack"| IndexTask
+    IndexTask -->|"Batch Embed (MRL 768)"| GeminiEmbed
+    IndexTask -->|"Store Vectors & Metadata"| ChromaDB
+    IndexTask -->|"Stream Logs & Progress"| Redis
     
-    CeleryBeat -->|Periodic Tasks| CeleryWorker
+    CeleryBeat -->|"Periodic Tasks"| CeleryWorker
 ```
 
 ---
