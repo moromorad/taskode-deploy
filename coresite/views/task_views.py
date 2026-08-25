@@ -114,6 +114,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 project = Project.objects.get(id=project_id, owner=request.user)
                 ast_outline = project.ast_outline
                 if project.is_indexed:
+                    print(f"\n[RAG Generation] ⚡ Project '{project.name}' is indexed ({project.embedding_model}). Retrieving code...")
                     try:
                         code_snippets = retrieve_relevant_code(
                             project.id,
@@ -121,8 +122,12 @@ class TaskViewSet(viewsets.ModelViewSet):
                             model=project.embedding_model or "gemini-embedding-2",
                             top_k=4,
                         )
+                        snippet_count = code_snippets.count("--- Code Snippet") if code_snippets else 0
+                        print(f"[RAG Generation] 📥 Injected {snippet_count} code snippet(s) into Gemini prompt context.")
                     except Exception as e:
-                        print(f"RAG code retrieval failed: {e}")
+                        print(f"[RAG Generation] ⚠️ Code retrieval failed: {e}")
+                else:
+                    print(f"\n[RAG Generation] ℹ️ Project '{project.name}' is not indexed yet. Using high-level AST outline fallback.")
             except Project.DoesNotExist:
                 return Response({"error": "Project not found or access denied"}, status=status.HTTP_404_NOT_FOUND)
 

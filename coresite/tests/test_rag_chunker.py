@@ -31,7 +31,7 @@ def test_get_token_count():
 # ==========================================
 
 def test_get_language_from_filepath_supported():
-    for ext in [".py", ".js", ".jsx", ".ts", ".tsx"]:
+    for ext in [".py", ".js", ".jsx", ".ts", ".tsx", ".java"]:
         res = get_language_from_filepath(f"app/file{ext}")
         assert res is not None
         lang_name, lang_obj = res
@@ -48,6 +48,10 @@ def test_get_query_pattern_for_language():
     py_pattern = get_query_pattern_for_language("python")
     assert "class_definition" in py_pattern
     assert "function_definition" in py_pattern
+
+    java_pattern = get_query_pattern_for_language("java")
+    assert "class_declaration" in java_pattern
+    assert "method_declaration" in java_pattern
 
     js_pattern = get_query_pattern_for_language("javascript")
     assert "class_declaration" in js_pattern
@@ -109,6 +113,22 @@ const sendNotification = (userId) => {
     types = [b["symbol_type"] for b in blocks]
     assert "Class" in types
     assert "Function" in types
+
+
+def test_extract_ast_code_blocks_java():
+    java_code = """public class PaymentProcessor {
+    public boolean processTransaction(double amount) {
+        return amount > 0;
+    }
+}
+"""
+    blocks = extract_ast_code_blocks(java_code, "src/PaymentProcessor.java")
+    assert len(blocks) >= 2
+    types = [b["symbol_type"] for b in blocks]
+    assert "Class" in types
+    assert "Function" in types
+    assert any("PaymentProcessor" in b["code"] for b in blocks)
+    assert any("processTransaction" in b["code"] for b in blocks)
 
 
 def test_extract_ast_code_blocks_unsupported_or_empty():

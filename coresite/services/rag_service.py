@@ -71,8 +71,10 @@ def embed_code_document(filepath: str, code_chunk: str, model: str = PRIMARY_MOD
                 vector = result.embeddings[0].values
                 return normalize_vector(vector), current_model
         except Exception as e:
+            print(f"[RAG Embed] ⚠️ Model {current_model} failed ({e}).")
             if current_model == models_to_try[-1]:
                 raise e
+            print(f"[RAG Embed] 🔄 Falling back to {FALLBACK_MODEL}...")
             continue
 
     raise RuntimeError("Failed to generate embedding with any model")
@@ -82,6 +84,7 @@ def embed_code_query(query: str, model: str = PRIMARY_MODEL, output_dim: int = 7
     """
     Generates embedding for a query using the exact model that indexed the project.
     """
+    print(f"[RAG Query] 🔍 Embedding user prompt using {model} (Query: '{query[:60]}...')...")
     if model == "gemini-embedding-2":
         formatted_query = f"task: code retrieval | query: {query}"
         result = genai_client.models.embed_content(
@@ -135,6 +138,7 @@ def index_project_chunks(project_id: int, chunks: list[dict[str, Any]], preferre
     metadatas: list[dict[str, Any]] = []
     model_used = preferred_model
 
+    print(f"[RAG Chroma] Storing {len(chunks)} chunks in collection '{collection_name}'...")
     for idx, chunk in enumerate(chunks):
         chunk_id = f"chunk_{project_id}_{idx}"
         vector, model_used = embed_code_document(chunk["filepath"], chunk["text"], model=model_used)
@@ -155,6 +159,7 @@ def index_project_chunks(project_id: int, chunks: list[dict[str, Any]], preferre
         embeddings=embeddings,
         metadatas=metadatas,
     )
+    print(f"[RAG Chroma] ✅ Successfully indexed {len(chunks)} chunks in '{collection_name}'.")
     return len(chunks), model_used
 
 
@@ -172,6 +177,7 @@ def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMAR
     try:
         collection = chroma.get_collection(name=collection_name)
     except Exception:
+        print(f"[RAG Retrieval] ⚠️ Collection '{collection_name}' not found in ChromaDB.")
         return ""
 
     query_vector = embed_code_query(query_text, model=model)
@@ -182,6 +188,7 @@ def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMAR
     )
 
     if not results or not results.get("documents") or not results["documents"][0]:
+        print(f"[RAG Retrieval] ⚠️ No matching code snippets found in '{collection_name}'.")
         return ""
 
     snippets = []
@@ -196,4 +203,5 @@ def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMAR
             f"{doc}\n"
         )
 
+    print(f"[RAG Retrieval] 🎯 Retrieved {len(snippets)} relevant code snippets from ChromaDB.")
     return "\n\n".join(snippets)

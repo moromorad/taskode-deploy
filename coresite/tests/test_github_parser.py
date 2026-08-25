@@ -61,6 +61,17 @@ function validatePayment() {}
     assert isinstance(tsx_symbols, list)
 
 
+def test_extract_symbols_java():
+    java_code = """
+public class AccountService {
+    public void deposit(double amount) {}
+}
+"""
+    java_symbols = extract_symbols_multilang(java_code, ".java")
+    assert any("class AccountService" in s for s in java_symbols)
+    assert any("function deposit" in s for s in java_symbols)
+
+
 def test_extract_symbols_unsupported_extension():
     assert extract_symbols_multilang("print('hello')", ".txt") == []
     assert extract_symbols_multilang("print('hello')", ".cpp") == []

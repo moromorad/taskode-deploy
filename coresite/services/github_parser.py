@@ -8,6 +8,7 @@ from tree_sitter import Language, Parser, Query, QueryCursor
 import tree_sitter_python
 import tree_sitter_javascript
 import tree_sitter_typescript
+import tree_sitter_java
 
 def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
    
@@ -29,7 +30,7 @@ def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
         return []
 
     # Only keep files (blobs) that end with our target extensions
-    valid_extensions = ('.py', '.js', '.jsx', '.ts', '.tsx')
+    valid_extensions = ('.py', '.js', '.jsx', '.ts', '.tsx', '.java')
     
     code_files = [
         item['path'] for item in tree_data.get('tree', []) 
@@ -78,7 +79,8 @@ def extract_symbols_multilang(code: str, file_extension: str) -> list:
         ".js": ("javascript", tree_sitter_javascript.language()),
         ".jsx": ("javascript", tree_sitter_javascript.language()),
         ".ts": ("typescript", tree_sitter_typescript.language_typescript()),
-        ".tsx": ("tsx", tree_sitter_typescript.language_tsx())
+        ".tsx": ("tsx", tree_sitter_typescript.language_tsx()),
+        ".java": ("java", tree_sitter_java.language()),
     }
     
     if file_extension not in lang_map:
@@ -98,6 +100,14 @@ def extract_symbols_multilang(code: str, file_extension: str) -> list:
             (class_definition name: (identifier) @class)
             (function_definition name: (identifier) @function)
             """
+        elif lang_name == "java":
+            query_str = """
+            (class_declaration name: (identifier) @class)
+            (interface_declaration name: (identifier) @class)
+            (record_declaration name: (identifier) @class)
+            (method_declaration name: (identifier) @function)
+            (constructor_declaration name: (identifier) @function)
+            """
         else:
             query_str = """
             (class_declaration name: (identifier) @class)
@@ -106,7 +116,6 @@ def extract_symbols_multilang(code: str, file_extension: str) -> list:
             (variable_declarator name: (identifier) @function value: (arrow_function))
             """
             
-        # --- THE REAL FIX ---
         # 1. Create the Query
         query = Query(language, query_str)
         # 2. Wrap it in a QueryCursor

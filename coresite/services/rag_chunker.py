@@ -5,6 +5,7 @@ from tree_sitter import Language, Parser, Query, QueryCursor
 import tree_sitter_python
 import tree_sitter_javascript
 import tree_sitter_typescript
+import tree_sitter_java
 
 tokenizer = tiktoken.get_encoding("cl100k_base")
 
@@ -18,7 +19,8 @@ def get_language_from_filepath(filepath: str) -> Optional[tuple[str, Language]]:
         ".js": ("javascript", tree_sitter_javascript.language()),
         ".jsx": ("javascript", tree_sitter_javascript.language()),
         ".ts": ("typescript", tree_sitter_typescript.language_typescript()),
-        ".tsx": ("tsx", tree_sitter_typescript.language_tsx())
+        ".tsx": ("tsx", tree_sitter_typescript.language_tsx()),
+        ".java": ("java", tree_sitter_java.language()),
     }
     if ext not in lang_map:
         return None
@@ -32,6 +34,14 @@ def get_query_pattern_for_language(lang_name: str) -> str:
         return """
         (class_definition name: (identifier) @class) @class_body
         (function_definition name: (identifier) @function) @function_body
+        """
+    elif lang_name == "java":
+        return """
+        (class_declaration name: (identifier) @class) @class_body
+        (interface_declaration name: (identifier) @class) @class_body
+        (record_declaration name: (identifier) @class) @class_body
+        (method_declaration name: (identifier) @function) @function_body
+        (constructor_declaration name: (identifier) @function) @function_body
         """
     return """
     (class_declaration name: (identifier) @class) @class_body
