@@ -14,6 +14,10 @@ def test_project_model_str(test_user):
         owner=test_user,
     )
     assert str(project) == "Beta Project"
+    assert project.is_indexed is False
+    assert project.last_indexed_at is None
+    assert project.collection_name == ""
+    assert project.embedding_model == "gemini-embedding-2"
 
 
 @pytest.mark.django_db

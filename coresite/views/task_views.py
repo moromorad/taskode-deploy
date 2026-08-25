@@ -2,6 +2,7 @@
 from typing import Optional
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from drf_spectacular.utils import (
@@ -19,6 +20,8 @@ from ..models import Project, Task, Weather
 from ..serializers import ProjectSerializer, TaskSerializer, UserSerializer
 from ..services import utils
 from ..services.github_parser import sync_project_ast
+from ..services.rag_service import retrieve_relevant_code
+from ..tasks import index_project_codebase
 
 
 @extend_schema_view(
@@ -105,18 +108,34 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         project = None
         ast_outline = None
+        code_snippets = None
 
         if project_id:
             try:
                 project = Project.objects.get(id=project_id, owner=request.user)
                 ast_outline = project.ast_outline
+                if project.is_indexed:
+                    print(f"\n[RAG Generation] ⚡ Project '{project.name}' is indexed ({project.embedding_model}). Retrieving code...")
+                    try:
+                        code_snippets = retrieve_relevant_code(
+                            project.id,
+                            text,
+                            model=project.embedding_model or "gemini-embedding-2",
+                            top_k=4,
+                        )
+                        snippet_count = code_snippets.count("--- Code Snippet") if code_snippets else 0
+                        print(f"[RAG Generation] 📥 Injected {snippet_count} code snippet(s) into Gemini prompt context.")
+                    except Exception as e:
+                        print(f"[RAG Generation] ⚠️ Code retrieval failed: {e}")
+                else:
+                    print(f"\n[RAG Generation] ℹ️ Project '{project.name}' is not indexed yet. Using high-level AST outline fallback.")
             except Project.DoesNotExist:
                 return Response({"error": "Project not found or access denied"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            task = utils.text_to_tasks(text, user_timezone, ast_outline)
+            task = utils.text_to_tasks(text, user_timezone, ast_outline, code_snippets)
         except Exception:
-            task = utils.text_to_tasks(text, "UTC", ast_outline)
+            task = utils.text_to_tasks(text, "UTC", ast_outline, code_snippets)
 
         task_data = task.model_dump()
         Task.objects.create(owner=request.user, project=project, **task_data)
@@ -172,6 +191,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 sync_project_ast(project, project.github_token)
             except Exception as e:
                 print(f"Auto-sync failed for {project.name}: {e}")
+            try:
+                index_project_codebase.delay(project.id, project.github_token)
+            except Exception as e:
+                print(f"Celery indexing dispatch failed for {project.name}: {e}")
 
     # endpoint: POST /api/projects/<id>/sync_repo/
     @extend_schema(
@@ -213,6 +236,16 @@ class ProjectViewSet(viewsets.ModelViewSet):
             if "Failed" in result_message or "empty" in result_message:
                 return Response({"error": result_message}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Mark is_indexed=False while background Celery vector indexing runs
+            project.is_indexed = False
+            project.save(update_fields=["is_indexed"])
+
+            # Trigger background Celery indexing into ChromaDB
+            try:
+                index_project_codebase.delay(project.id, github_token)
+            except Exception as e:
+                print(f"Celery indexing dispatch failed: {e}")
+
             return Response({
                 "status": "success",
                 "message": result_message,
@@ -220,6 +253,55 @@ class ProjectViewSet(viewsets.ModelViewSet):
             })
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # endpoint: GET /api/projects/<id>/index_status/
+    @extend_schema(
+        tags=["Projects"],
+        summary="Get live RAG indexing status and console logs",
+        description="Returns real-time indexing progress, current step, and live logs from Redis cache.",
+        responses={
+            200: inline_serializer(
+                name="ProjectIndexStatusResponse",
+                fields={
+                    "status": serializers.CharField(),
+                    "progress": serializers.IntegerField(),
+                    "stage": serializers.CharField(),
+                    "current_step": serializers.CharField(),
+                    "logs": serializers.ListField(child=serializers.CharField()),
+                    "is_indexed": serializers.BooleanField(),
+                    "embedding_model": serializers.CharField(allow_null=True),
+                },
+            ),
+        },
+    )
+    @action(detail=True, methods=["get"])
+    def index_status(self, request, pk=None):
+        project = self.get_object()
+        cache_key = f"project_rag_status:{project.id}"
+        status_data = None
+        try:
+            status_data = cache.get(cache_key)
+        except Exception:
+            pass
+
+        if not status_data:
+            from ..tasks import _IN_MEMORY_RAG_STATUS
+            status_data = _IN_MEMORY_RAG_STATUS.get(project.id)
+
+        if not status_data:
+            status_data = {
+                "status": "completed" if project.is_indexed else "idle",
+                "progress": 100 if project.is_indexed else 0,
+                "stage": "completed" if project.is_indexed else "idle",
+                "current_step": "Ready" if project.is_indexed else "Not indexed yet",
+                "logs": [f"[RAG Status] Project '{project.name}' is indexed and ready."] if project.is_indexed else ["[RAG Status] Project not indexed yet."],
+                "model": project.embedding_model,
+                "chunk_count": 0,
+            }
+
+        status_data["is_indexed"] = project.is_indexed
+        status_data["embedding_model"] = project.embedding_model
+        return Response(status_data)
 
 
 def task_interface(request: HttpRequest) -> HttpResponse:

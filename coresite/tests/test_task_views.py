@@ -1,4 +1,4 @@
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 import pytest
 from django.contrib.auth.models import User
 from django.test import RequestFactory
@@ -69,7 +69,8 @@ def test_task_viewset_swagger_fake_view(test_user):
 
 
 @pytest.mark.django_db
-def test_project_viewset_crud_and_autosync(auth_client, test_user):
+@patch("coresite.views.task_views.index_project_codebase.delay")
+def test_project_viewset_crud_and_autosync(mock_delay, auth_client, test_user):
     # Create with github_repo triggering auto-sync
     with patch("coresite.views.task_views.sync_project_ast", return_value="Sync successful") as mock_sync:
         create_resp = auth_client.post("/api/projects/", {
@@ -80,6 +81,7 @@ def test_project_viewset_crud_and_autosync(auth_client, test_user):
         assert create_resp.status_code == status.HTTP_201_CREATED
         project_id = create_resp.json()["id"]
         assert mock_sync.called
+        assert mock_delay.called
 
     # Create with auto-sync raising exception
     with patch("coresite.views.task_views.sync_project_ast", side_effect=Exception("Network error")):
@@ -121,7 +123,8 @@ def test_project_viewset_swagger_fake_view():
 
 
 @pytest.mark.django_db
-def test_project_sync_repo_endpoint_success(auth_client, sample_project):
+@patch("coresite.views.task_views.index_project_codebase.delay")
+def test_project_sync_repo_endpoint_success(mock_delay, auth_client, sample_project):
     with patch("coresite.views.task_views.sync_project_ast", return_value="Sync successful"):
         sample_project.ast_outline = "File: main.py\n  class App"
         sample_project.save()
@@ -133,6 +136,7 @@ def test_project_sync_repo_endpoint_success(auth_client, sample_project):
         data = response.json()
         assert data["status"] == "success"
         assert "main.py" in data["ast_preview"]
+        assert mock_delay.called
 
 
 @pytest.mark.django_db
@@ -149,6 +153,46 @@ def test_project_sync_repo_endpoint_exception(auth_client, sample_project):
         response = auth_client.post(f"/api/projects/{sample_project.id}/sync_repo/")
         assert response.status_code == status.HTTP_500_INTERNAL_SERVER_ERROR
         assert "Connection timed out" in response.json()["error"]
+
+
+@pytest.mark.django_db
+def test_project_index_status_cached(auth_client, sample_project):
+    from coresite.tasks import update_project_progress
+    update_project_progress(
+        project_id=sample_project.id,
+        progress=65,
+        stage="batch_embedding",
+        current_step="Processing batch 1/2...",
+        new_log="[RAG Indexing] 🚀 Starting...",
+        model="gemini-embedding-2",
+        chunk_count=78,
+    )
+
+    response = auth_client.get(f"/api/projects/{sample_project.id}/index_status/")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["progress"] == 65
+    assert data["stage"] == "batch_embedding"
+    assert len(data["logs"]) >= 1
+
+
+@pytest.mark.django_db
+def test_project_index_status_not_cached(auth_client, sample_project):
+    from django.core.cache import cache
+    from coresite.tasks import _IN_MEMORY_RAG_STATUS
+    cache.delete(f"project_rag_status:{sample_project.id}")
+    _IN_MEMORY_RAG_STATUS.pop(sample_project.id, None)
+
+    sample_project.is_indexed = True
+    sample_project.embedding_model = "gemini-embedding-2"
+    sample_project.save()
+
+    response = auth_client.get(f"/api/projects/{sample_project.id}/index_status/")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "completed"
+    assert data["progress"] == 100
+    assert data["is_indexed"] is True
 
 
 @pytest.mark.django_db
@@ -183,3 +227,48 @@ def test_user_list_and_detail(auth_client, test_user):
     detail_resp = auth_client.get(f"/api/users/{test_user.id}/")
     assert detail_resp.status_code == status.HTTP_200_OK
     assert detail_resp.json()["username"] == test_user.username
+
+
+@pytest.mark.django_db
+def test_task_viewset_gen_no_text(auth_client):
+    resp = auth_client.post("/api/tasks/gen/", {})
+    assert resp.status_code == status.HTTP_400_BAD_REQUEST
+
+
+@pytest.mark.django_db
+def test_task_viewset_gen_project_not_found(auth_client):
+    resp = auth_client.post("/api/tasks/gen/", {"text": "Make a button", "project_id": 9999})
+    assert resp.status_code == status.HTTP_404_NOT_FOUND
+
+
+@pytest.mark.django_db
+def test_task_viewset_gen_with_indexed_project_rag(auth_client, test_user, sample_project):
+    sample_project.is_indexed = True
+    sample_project.ast_outline = "File: auth.py\n  class Login"
+    sample_project.embedding_model = "gemini-embedding-2"
+    sample_project.save()
+
+    mock_task_obj = MagicMock()
+    mock_task_obj.model_dump.return_value = {
+        "title": "Add 2FA Login",
+        "description": "Implement 2FA flow",
+        "ticket_type": "feature",
+        "due_date": None,
+        "completed": False,
+        "subtasks": [{"title": "Subtask 1", "completed": False}],
+    }
+
+    with patch("coresite.views.task_views.retrieve_relevant_code", return_value="def login(): pass") as mock_rag:
+        with patch("coresite.views.task_views.utils.text_to_tasks", return_value=mock_task_obj) as mock_ai:
+            resp = auth_client.post("/api/tasks/gen/", {
+                "text": "Add 2FA Login",
+                "timezone": "UTC",
+                "project_id": sample_project.id,
+            })
+            assert resp.status_code == status.HTTP_201_CREATED
+            mock_rag.assert_called_once_with(sample_project.id, "Add 2FA Login", model="gemini-embedding-2", top_k=4)
+            mock_ai.assert_called_once_with("Add 2FA Login", "UTC", sample_project.ast_outline, "def login(): pass")
+
+            created = Task.objects.filter(owner=test_user, title="Add 2FA Login").first()
+            assert created is not None
+            assert created.project == sample_project

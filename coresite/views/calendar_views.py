@@ -24,10 +24,10 @@ def generate_ical_feed(profile: UserProfile) -> bytes:
     )
 
     cal = Calendar()
-    cal.add("prodid", "-//AI Task Platform//Tasks Feed//EN")
+    cal.add("prodid", "-//TasKode//Tasks Feed//EN")
     cal.add("version", "2.0")
-    cal.add("x-wr-calname", f"{profile.user.username}'s Tasks")
-    cal.add("x-wr-caldesc", "Active tasks and deadlines from AI Task Platform")
+    cal.add("x-wr-calname", f"{profile.user.username}'s TasKode Tasks")
+    cal.add("x-wr-caldesc", "Active tasks and deadlines from TasKode")
     cal.add("x-published-ttl", "PT1H")
     cal.add("refresh-interval;value=duration", "PT1H")
 

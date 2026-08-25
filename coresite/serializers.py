@@ -20,7 +20,14 @@ class ProjectSerializer(serializers.ModelSerializer):
     class Meta:
         model = Project
         fields = '__all__'
-        read_only_fields = ["owner", "ast_outline"]
+        read_only_fields = [
+            "owner",
+            "ast_outline",
+            "is_indexed",
+            "last_indexed_at",
+            "collection_name",
+            "embedding_model",
+        ]
 
 
 class WeatherSerializer(serializers.ModelSerializer):

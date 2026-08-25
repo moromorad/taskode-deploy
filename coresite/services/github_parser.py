@@ -8,12 +8,13 @@ from tree_sitter import Language, Parser, Query, QueryCursor
 import tree_sitter_python
 import tree_sitter_javascript
 import tree_sitter_typescript
+import tree_sitter_java
 
 def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
    
     # Use recursive=1 to get all files in all nested folders in one single API call
     url = f"https://api.github.com/repos/{github_repo}/git/trees/main?recursive=1"
-    req = urllib.request.Request(url, headers={"User-Agent": "Django-Ticket-App"})
+    req = urllib.request.Request(url, headers={"User-Agent": "TasKode-App"})
     
     if github_token:
         req.add_header('Authorization', f'Bearer {github_token}')
@@ -28,12 +29,26 @@ def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
         print(f"An error occurred: {e}")
         return []
 
-    # Only keep files (blobs) that end with our target extensions
-    valid_extensions = ('.py', '.js', '.jsx', '.ts', '.tsx')
+    # Only keep production code files (blobs) that end with our target extensions
+    valid_extensions = ('.py', '.js', '.jsx', '.ts', '.tsx', '.java')
+    ignored_patterns = (
+        'test/', 'tests/', '__tests__/', 'spec/', 'specs/',
+        '/test', '/tests', 'test_', '_test.', '.test.', '.spec.', 'test.java', 'tests.java',
+        'node_modules/', 'dist/', 'build/', 'target/', 'vendor/', '.venv/', 'venv/',
+    )
+
+    def is_valid_source_file(path: str) -> bool:
+        if not path.endswith(valid_extensions):
+            return False
+        lower_path = "/" + path.lower().lstrip("/")
+        for ignored in ignored_patterns:
+            if ignored in lower_path:
+                return False
+        return True
     
     code_files = [
         item['path'] for item in tree_data.get('tree', []) 
-        if item['type'] == 'blob' and item['path'].endswith(valid_extensions)
+        if item['type'] == 'blob' and is_valid_source_file(item['path'])
     ]
     
     return code_files
@@ -43,7 +58,7 @@ def fetch_file_content(github_repo: str, filepath: str, github_token: str = None
     # Attempt to fetch from the 'main' branch first
     raw_url = f"https://raw.githubusercontent.com/{github_repo}/main/{filepath}"
     
-    req = urllib.request.Request(raw_url, headers={"User-Agent": "Django-Ticket-App"})
+    req = urllib.request.Request(raw_url, headers={"User-Agent": "TasKode-App"})
     if github_token:
         req.add_header('Authorization', f'Bearer {github_token}')
         
@@ -54,7 +69,7 @@ def fetch_file_content(github_repo: str, filepath: str, github_token: str = None
         # Fallback: Many older repositories still use 'master' instead of 'main'
         if e.code == 404:
             master_url = f"https://raw.githubusercontent.com/{github_repo}/master/{filepath}"
-            req_master = urllib.request.Request(master_url, headers={"User-Agent": "Django-Ticket-App"})
+            req_master = urllib.request.Request(master_url, headers={"User-Agent": "TasKode-App"})
             if github_token:
                 req_master.add_header('Authorization', f'Bearer {github_token}')
             try:
@@ -78,7 +93,8 @@ def extract_symbols_multilang(code: str, file_extension: str) -> list:
         ".js": ("javascript", tree_sitter_javascript.language()),
         ".jsx": ("javascript", tree_sitter_javascript.language()),
         ".ts": ("typescript", tree_sitter_typescript.language_typescript()),
-        ".tsx": ("tsx", tree_sitter_typescript.language_tsx())
+        ".tsx": ("tsx", tree_sitter_typescript.language_tsx()),
+        ".java": ("java", tree_sitter_java.language()),
     }
     
     if file_extension not in lang_map:
@@ -98,6 +114,14 @@ def extract_symbols_multilang(code: str, file_extension: str) -> list:
             (class_definition name: (identifier) @class)
             (function_definition name: (identifier) @function)
             """
+        elif lang_name == "java":
+            query_str = """
+            (class_declaration name: (identifier) @class)
+            (interface_declaration name: (identifier) @class)
+            (record_declaration name: (identifier) @class)
+            (method_declaration name: (identifier) @function)
+            (constructor_declaration name: (identifier) @function)
+            """
         else:
             query_str = """
             (class_declaration name: (identifier) @class)
@@ -106,7 +130,6 @@ def extract_symbols_multilang(code: str, file_extension: str) -> list:
             (variable_declarator name: (identifier) @function value: (arrow_function))
             """
             
-        # --- THE REAL FIX ---
         # 1. Create the Query
         query = Query(language, query_str)
         # 2. Wrap it in a QueryCursor
