@@ -19,6 +19,8 @@ from ..models import Project, Task, Weather
 from ..serializers import ProjectSerializer, TaskSerializer, UserSerializer
 from ..services import utils
 from ..services.github_parser import sync_project_ast
+from ..services.rag_service import retrieve_relevant_code
+from ..tasks import index_project_codebase
 
 
 @extend_schema_view(
@@ -105,18 +107,29 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         project = None
         ast_outline = None
+        code_snippets = None
 
         if project_id:
             try:
                 project = Project.objects.get(id=project_id, owner=request.user)
                 ast_outline = project.ast_outline
+                if project.is_indexed:
+                    try:
+                        code_snippets = retrieve_relevant_code(
+                            project.id,
+                            text,
+                            model=project.embedding_model or "gemini-embedding-2",
+                            top_k=4,
+                        )
+                    except Exception as e:
+                        print(f"RAG code retrieval failed: {e}")
             except Project.DoesNotExist:
                 return Response({"error": "Project not found or access denied"}, status=status.HTTP_404_NOT_FOUND)
 
         try:
-            task = utils.text_to_tasks(text, user_timezone, ast_outline)
+            task = utils.text_to_tasks(text, user_timezone, ast_outline, code_snippets)
         except Exception:
-            task = utils.text_to_tasks(text, "UTC", ast_outline)
+            task = utils.text_to_tasks(text, "UTC", ast_outline, code_snippets)
 
         task_data = task.model_dump()
         Task.objects.create(owner=request.user, project=project, **task_data)
@@ -172,6 +185,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
                 sync_project_ast(project, project.github_token)
             except Exception as e:
                 print(f"Auto-sync failed for {project.name}: {e}")
+            try:
+                index_project_codebase.delay(project.id, project.github_token)
+            except Exception as e:
+                print(f"Celery indexing dispatch failed for {project.name}: {e}")
 
     # endpoint: POST /api/projects/<id>/sync_repo/
     @extend_schema(
@@ -212,6 +229,12 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
             if "Failed" in result_message or "empty" in result_message:
                 return Response({"error": result_message}, status=status.HTTP_400_BAD_REQUEST)
+
+            # Trigger background Celery indexing into ChromaDB
+            try:
+                index_project_codebase.delay(project.id, github_token)
+            except Exception as e:
+                print(f"Celery indexing dispatch failed: {e}")
 
             return Response({
                 "status": "success",

@@ -469,6 +469,7 @@
                             <select id="ai-project-select">
                                 <option value="none">No Project</option>
                             </select>
+                            <div id="ai-rag-indicator" style="display: none; font-size: 0.8em; padding: 6px 10px; border-radius: var(--radius-sm); margin-top: 6px; align-items: center; gap: 6px; line-height: 1.4;"></div>
                         </div>
                         <textarea id="ai-task-text" rows="5" placeholder="E.g., Add input validation to the signup form and write unit tests for the auth module." required style="resize: vertical;"></textarea>
                         <button type="submit" class="btn-primary">Generate Tasks</button>
@@ -525,10 +526,14 @@
     <!-- AST Modal -->
     <dialog id="ast-modal" style="max-width: 800px; width: 95%;">
         <div class="modal-header">
-            <h3>Project AST Outline</h3>
+            <h3>Project AST & RAG Status</h3>
             <button class="close-btn" id="close-ast-modal">&times;</button>
         </div>
-        <pre id="ast-content" style="padding: 15px; border-radius: var(--radius-sm); overflow-x: auto; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; max-height: 60vh; overflow-y: auto;"></pre>
+        <div id="ast-rag-banner" style="margin-bottom: 12px; padding: 10px 14px; border-radius: var(--radius-sm); font-size: 0.85em; background: var(--surface-hover); border: 1px solid var(--border);">
+            <div id="ast-rag-status" style="font-weight: 600;"></div>
+            <div id="ast-rag-details" style="color: var(--text-secondary); margin-top: 4px; font-size: 0.9em;"></div>
+        </div>
+        <pre id="ast-content" style="padding: 15px; border-radius: var(--radius-sm); overflow-x: auto; font-family: monospace; font-size: 0.9em; white-space: pre-wrap; word-wrap: break-word; max-height: 50vh; overflow-y: auto;"></pre>
     </dialog>
 
     <!-- Calendar Sync Modal -->
@@ -627,6 +632,9 @@
         const deleteProjectBtn = document.getElementById('delete-project-btn');
         const closeAstModalBtn = document.getElementById('close-ast-modal');
         const astContent = document.getElementById('ast-content');
+        const aiRagIndicator = document.getElementById('ai-rag-indicator');
+        const astRagStatus = document.getElementById('ast-rag-status');
+        const astRagDetails = document.getElementById('ast-rag-details');
 
         // Calendar Sync Modal Elements
         const calendarModal = document.getElementById('calendar-modal');
@@ -950,8 +958,36 @@
                 }
                 
                 updateProjectButtonsVisibility();
+                updateAiRagIndicator();
             } catch (error) {
                 console.error("Error fetching projects:", error);
+            }
+        }
+
+        function updateAiRagIndicator() {
+            const selectedId = aiProjectSelect.value;
+            const project = allProjects.find(p => String(p.id) === selectedId);
+            if (!project || selectedId === 'none') {
+                aiRagIndicator.style.display = 'none';
+                return;
+            }
+
+            aiRagIndicator.style.display = 'flex';
+            if (project.is_indexed) {
+                aiRagIndicator.style.background = 'rgba(40, 167, 69, 0.12)';
+                aiRagIndicator.style.color = '#28a745';
+                aiRagIndicator.style.border = '1px solid rgba(40, 167, 69, 0.25)';
+                aiRagIndicator.innerHTML = `⚡ <strong>RAG Active:</strong> Codebase vector search ready (${project.embedding_model || 'gemini-embedding-2'})`;
+            } else if (project.github_repo) {
+                aiRagIndicator.style.background = 'rgba(255, 193, 7, 0.12)';
+                aiRagIndicator.style.color = '#ffc107';
+                aiRagIndicator.style.border = '1px solid rgba(255, 193, 7, 0.25)';
+                aiRagIndicator.innerHTML = `⏳ <strong>Indexing in progress:</strong> Embedding codebase in background (using AST outline for now)`;
+            } else {
+                aiRagIndicator.style.background = 'rgba(108, 117, 125, 0.12)';
+                aiRagIndicator.style.color = 'var(--text-secondary)';
+                aiRagIndicator.style.border = '1px solid rgba(108, 117, 125, 0.25)';
+                aiRagIndicator.innerHTML = `📂 <strong>Standard outline:</strong> No GitHub repository linked`;
             }
         }
 
@@ -963,6 +999,14 @@
                 viewAstBtn.style.display = 'inline-block';
                 viewAstBtn.onclick = () => {
                     astContent.textContent = project.ast_outline;
+                    if (project.is_indexed) {
+                        astRagStatus.innerHTML = `<span style="color: #28a745;">🟢 ChromaDB Vector Index: Active</span>`;
+                        const lastIndexed = project.last_indexed_at ? new Date(project.last_indexed_at).toLocaleString() : 'Recently';
+                        astRagDetails.textContent = `Model: ${project.embedding_model || 'gemini-embedding-2'} • Collection: ${project.collection_name || 'project_' + project.id} • Last Indexed: ${lastIndexed}`;
+                    } else {
+                        astRagStatus.innerHTML = `<span style="color: #ffc107;">⏳ Vector Index: Pending / Not Indexed</span>`;
+                        astRagDetails.textContent = `Click "Sync Repo" to trigger background Celery indexing into ChromaDB.`;
+                    }
                     astModal.showModal();
                 };
             } else {
@@ -1063,6 +1107,7 @@
 
         aiProjectSelect.addEventListener('change', () => {
             localStorage.setItem('selected_ai_project', aiProjectSelect.value);
+            updateAiRagIndicator();
         });
 
         // ----- CREATE PROJECT -----

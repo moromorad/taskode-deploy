@@ -50,7 +50,12 @@ def get_weather_category(weather_code: int) -> str:
 
 
 
-def text_to_tasks(text: str, user_timezone: str = "UTC", ast_outline: str = None) -> TaskCreate:  # pragma: no cover
+def text_to_tasks(
+    text: str,
+    user_timezone: str = "UTC",
+    ast_outline: str = None,
+    code_snippets: str = None,
+) -> TaskCreate:  # pragma: no cover
     tz = zoneinfo.ZoneInfo(user_timezone)
     current_time_str = datetime.now(tz).strftime("%A, %Y-%m-%d %H:%M:%S %z")
 
@@ -61,12 +66,17 @@ def text_to_tasks(text: str, user_timezone: str = "UTC", ast_outline: str = None
             f"--- REPOSITORY OUTLINE ---\n{ast_outline}\n--------------------------\n\n"
         )
 
+    if code_snippets:
+        instructions += (
+            f"--- RELEVANT CODE IMPLEMENTATION SNIPPETS ---\n{code_snippets}\n----------------------------------------------\n\n"
+        )
+
     instructions += (
         f"You are a Senior Tech Lead generating detailed developer tickets.\n"
         f"The user is in the timezone: {user_timezone}.\n"
         f"CURRENT DATE & TIME: {current_time_str}\n\n"
         f"CRITICAL RULES:\n"
-        f"1. AST MAPPING: You MUST analyze the REPOSITORY OUTLINE. Assign your subtasks to specific, existing files in the outline whenever logically possible (e.g., put new API endpoints in the existing views file, put parsing logic in the existing parser file).\n"
+        f"1. AST & CODE MAPPING: Analyze the REPOSITORY OUTLINE and RELEVANT CODE IMPLEMENTATION SNIPPETS. Assign subtasks to specific existing files, functions, and classes matching real method signatures whenever possible.\n"
         f"2. You MUST write a technical summary in the `description` field.\n"
         f"3. You MUST populate the `subtasks` array with step-by-step instructions. DO NOT leave it empty.\n"
         f"4. Calculate deadlines from the CURRENT DATE and format strictly as an ISO 8601 string with the timezone offset (e.g., 'YYYY-MM-DDTHH:MM:SS+03:00').\n"

@@ -3,6 +3,15 @@ services:
     image: redis:alpine
     ports:
       - "6379:6379"
+  
+  chromadb:
+    image: chromadb/chroma:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - chroma_data:/chroma/chroma
+    environment:
+      - IS_PERSISTENT=TRUE
 
   web:
     build: .
@@ -16,8 +25,10 @@ services:
       - .:/app
     depends_on:
       - redis
+      - chromadb
     env_file:
       - .env
+    
 
   celery_worker:
     build: .
@@ -27,6 +38,7 @@ services:
     depends_on:
       - redis
       - web
+      - chromadb
 
   celery_beat:
     build: .
@@ -36,3 +48,6 @@ services:
     depends_on:
       - redis
       - web
+
+volumes:
+  chroma_data:

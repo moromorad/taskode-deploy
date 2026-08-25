@@ -24,6 +24,27 @@ class Project(models.Model):
         "auth.User", related_name="projects", on_delete=models.CASCADE
     )
     created_at = models.DateTimeField(auto_now_add=True)
+    is_indexed = models.BooleanField(
+        default=False,
+        help_text="Indicates whether this project's code has been embedded into ChromaDB",
+    )
+    last_indexed_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp of when the repository was last embedded",
+    )
+    collection_name = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text="ChromaDB collection identifier, e.g. 'project_1'",
+    )
+    embedding_model = models.CharField(
+        max_length=50,
+        blank=True,
+        default="gemini-embedding-2",
+        help_text="Model used to generate vectors (gemini-embedding-2 or gemini-embedding-001)",
+    )
 
     def __str__(self):
         return self.name

@@ -105,3 +105,5 @@ pluggy==1.6.0
 pytest==9.1.1
 pytest-cov==7.1.0
 pytest-django==4.14.0
+chromadb==1.5.9
+tiktoken==0.14.0
