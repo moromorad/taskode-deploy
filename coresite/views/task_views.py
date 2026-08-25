@@ -2,6 +2,7 @@
 from typing import Optional
 
 from django.contrib.auth.models import User
+from django.core.cache import cache
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import render
 from drf_spectacular.utils import (
@@ -235,6 +236,10 @@ class ProjectViewSet(viewsets.ModelViewSet):
             if "Failed" in result_message or "empty" in result_message:
                 return Response({"error": result_message}, status=status.HTTP_400_BAD_REQUEST)
 
+            # Mark is_indexed=False while background Celery vector indexing runs
+            project.is_indexed = False
+            project.save(update_fields=["is_indexed"])
+
             # Trigger background Celery indexing into ChromaDB
             try:
                 index_project_codebase.delay(project.id, github_token)
@@ -248,6 +253,55 @@ class ProjectViewSet(viewsets.ModelViewSet):
             })
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # endpoint: GET /api/projects/<id>/index_status/
+    @extend_schema(
+        tags=["Projects"],
+        summary="Get live RAG indexing status and console logs",
+        description="Returns real-time indexing progress, current step, and live logs from Redis cache.",
+        responses={
+            200: inline_serializer(
+                name="ProjectIndexStatusResponse",
+                fields={
+                    "status": serializers.CharField(),
+                    "progress": serializers.IntegerField(),
+                    "stage": serializers.CharField(),
+                    "current_step": serializers.CharField(),
+                    "logs": serializers.ListField(child=serializers.CharField()),
+                    "is_indexed": serializers.BooleanField(),
+                    "embedding_model": serializers.CharField(allow_null=True),
+                },
+            ),
+        },
+    )
+    @action(detail=True, methods=["get"])
+    def index_status(self, request, pk=None):
+        project = self.get_object()
+        cache_key = f"project_rag_status:{project.id}"
+        status_data = None
+        try:
+            status_data = cache.get(cache_key)
+        except Exception:
+            pass
+
+        if not status_data:
+            from ..tasks import _IN_MEMORY_RAG_STATUS
+            status_data = _IN_MEMORY_RAG_STATUS.get(project.id)
+
+        if not status_data:
+            status_data = {
+                "status": "completed" if project.is_indexed else "idle",
+                "progress": 100 if project.is_indexed else 0,
+                "stage": "completed" if project.is_indexed else "idle",
+                "current_step": "Ready" if project.is_indexed else "Not indexed yet",
+                "logs": [f"[RAG Status] Project '{project.name}' is indexed and ready."] if project.is_indexed else ["[RAG Status] Project not indexed yet."],
+                "model": project.embedding_model,
+                "chunk_count": 0,
+            }
+
+        status_data["is_indexed"] = project.is_indexed
+        status_data["embedding_model"] = project.embedding_model
+        return Response(status_data)
 
 
 def task_interface(request: HttpRequest) -> HttpResponse:

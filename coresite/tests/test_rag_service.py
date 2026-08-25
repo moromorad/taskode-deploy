@@ -3,6 +3,7 @@ import pytest
 
 from coresite.services.rag_service import (
     embed_code_document,
+    embed_code_documents_batch,
     embed_code_query,
     get_chroma_client,
     index_project_chunks,
@@ -42,59 +43,55 @@ def test_get_chroma_client_fallback_to_persistent():
 
 
 # ==========================================
-# 2. Embedding Generation & Fallback Tests
+# 2. Embedding Generation Tests (gemini-embedding-001)
 # ==========================================
 
 def test_embed_code_document_primary_model():
     mock_response = MagicMock()
     mock_embedding = MagicMock()
-    mock_embedding.values = [0.1, 0.2, 0.3]
+    mock_embedding.values = [3.0, 4.0]
     mock_response.embeddings = [mock_embedding]
 
     with patch("coresite.services.rag_service.genai_client.models.embed_content", return_value=mock_response) as mock_embed:
         vec, model_used = embed_code_document("coresite/models.py", "class Project(models.Model): pass")
-        assert vec == [0.1, 0.2, 0.3]
-        assert model_used == "gemini-embedding-2"
-        mock_embed.assert_called_once()
-        call_kwargs = mock_embed.call_args.kwargs
-        assert call_kwargs["model"] == "gemini-embedding-2"
-        assert "title: coresite/models.py | text: class Project" in call_kwargs["contents"]
-
-
-def test_embed_code_document_fallback_to_001():
-    mock_response = MagicMock()
-    mock_embedding = MagicMock()
-    mock_embedding.values = [3.0, 4.0]
-    mock_response.embeddings = [mock_embedding]
-
-    def side_effect(*args, **kwargs):
-        if kwargs.get("model") == "gemini-embedding-2":
-            raise Exception("Rate limit on model 2")
-        return mock_response
-
-    with patch("coresite.services.rag_service.genai_client.models.embed_content", side_effect=side_effect):
-        vec, model_used = embed_code_document("coresite/models.py", "class Project: pass")
         assert pytest.approx(vec[0]) == 0.6
         assert pytest.approx(vec[1]) == 0.8
         assert model_used == "gemini-embedding-001"
+        mock_embed.assert_called_once()
+        call_kwargs = mock_embed.call_args.kwargs
+        assert call_kwargs["model"] == "gemini-embedding-001"
+        assert "class Project(models.Model): pass" in call_kwargs["contents"]
 
 
-def test_embed_code_document_all_fail():
-    with patch("coresite.services.rag_service.genai_client.models.embed_content", side_effect=Exception("Total failure")):
-        with pytest.raises(Exception):
-            embed_code_document("coresite/models.py", "code")
+def test_embed_code_documents_batch_slicing():
+    chunks = [
+        {"filepath": f"file_{i}.py", "text": f"code_{i}"}
+        for i in range(5)
+    ]
+
+    def side_effect(*args, **kwargs):
+        resp = MagicMock()
+        items = kwargs.get("contents", [])
+        resp.embeddings = [MagicMock(values=[3.0, 4.0]) for _ in items]
+        return resp
+
+    with patch("coresite.services.rag_service.genai_client.models.embed_content", side_effect=side_effect) as mock_embed:
+        vectors, model_used = embed_code_documents_batch(chunks, batch_size=2, model="gemini-embedding-001")
+        assert len(vectors) == 5
+        assert model_used == "gemini-embedding-001"
+        assert mock_embed.call_count == 3  # 5 items with batch_size 2 -> 3 batch API requests!
+        for v in vectors:
+            assert pytest.approx(v[0]) == 0.6
+            assert pytest.approx(v[1]) == 0.8
 
 
-def test_embed_code_query_gemini_2():
-    mock_response = MagicMock()
-    mock_embedding = MagicMock()
-    mock_embedding.values = [0.4, 0.5, 0.6]
-    mock_response.embeddings = [mock_embedding]
+def test_embed_code_documents_batch_fails_raises_error():
+    chunks = [{"filepath": "app.py", "text": "def test(): pass"}]
 
-    with patch("coresite.services.rag_service.genai_client.models.embed_content", return_value=mock_response) as mock_embed:
-        res = embed_code_query("Add user login 2FA verification", model="gemini-embedding-2")
-        assert res == [0.4, 0.5, 0.6]
-        assert mock_embed.call_args.kwargs["model"] == "gemini-embedding-2"
+    with patch("coresite.services.rag_service.genai_client.models.embed_content", side_effect=Exception("429 Quota Exceeded")):
+        with pytest.raises(Exception) as exc_info:
+            embed_code_documents_batch(chunks, model="gemini-embedding-001")
+        assert "429 Quota Exceeded" in str(exc_info.value)
 
 
 def test_embed_code_query_gemini_001():
@@ -117,7 +114,7 @@ def test_embed_code_query_gemini_001():
 def test_index_project_chunks_empty():
     count, model = index_project_chunks(1, [])
     assert count == 0
-    assert model == "gemini-embedding-2"
+    assert model == "gemini-embedding-001"
 
 
 def test_index_project_chunks_success():
@@ -136,7 +133,7 @@ def test_index_project_chunks_success():
     mock_chroma.create_collection.return_value = mock_collection
 
     with patch("coresite.services.rag_service.get_chroma_client", return_value=mock_chroma):
-        with patch("coresite.services.rag_service.embed_code_document", return_value=([0.1, 0.2], "gemini-embedding-2")):
+        with patch("coresite.services.rag_service.embed_code_documents_batch", return_value=([[0.1, 0.2]], "gemini-embedding-2")):
             count, model_used = index_project_chunks(42, chunks)
             assert count == 1
             assert model_used == "gemini-embedding-2"

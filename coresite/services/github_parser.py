@@ -29,12 +29,26 @@ def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
         print(f"An error occurred: {e}")
         return []
 
-    # Only keep files (blobs) that end with our target extensions
+    # Only keep production code files (blobs) that end with our target extensions
     valid_extensions = ('.py', '.js', '.jsx', '.ts', '.tsx', '.java')
+    ignored_patterns = (
+        'test/', 'tests/', '__tests__/', 'spec/', 'specs/',
+        '/test', '/tests', 'test_', '_test.', '.test.', '.spec.', 'test.java', 'tests.java',
+        'node_modules/', 'dist/', 'build/', 'target/', 'vendor/', '.venv/', 'venv/',
+    )
+
+    def is_valid_source_file(path: str) -> bool:
+        if not path.endswith(valid_extensions):
+            return False
+        lower_path = "/" + path.lower().lstrip("/")
+        for ignored in ignored_patterns:
+            if ignored in lower_path:
+                return False
+        return True
     
     code_files = [
         item['path'] for item in tree_data.get('tree', []) 
-        if item['type'] == 'blob' and item['path'].endswith(valid_extensions)
+        if item['type'] == 'blob' and is_valid_source_file(item['path'])
     ]
     
     return code_files

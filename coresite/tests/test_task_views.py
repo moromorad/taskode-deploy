@@ -152,6 +152,46 @@ def test_project_sync_repo_endpoint_exception(auth_client, sample_project):
 
 
 @pytest.mark.django_db
+def test_project_index_status_cached(auth_client, sample_project):
+    from coresite.tasks import update_project_progress
+    update_project_progress(
+        project_id=sample_project.id,
+        progress=65,
+        stage="batch_embedding",
+        current_step="Processing batch 1/2...",
+        new_log="[RAG Indexing] 🚀 Starting...",
+        model="gemini-embedding-2",
+        chunk_count=78,
+    )
+
+    response = auth_client.get(f"/api/projects/{sample_project.id}/index_status/")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["progress"] == 65
+    assert data["stage"] == "batch_embedding"
+    assert len(data["logs"]) >= 1
+
+
+@pytest.mark.django_db
+def test_project_index_status_not_cached(auth_client, sample_project):
+    from django.core.cache import cache
+    from coresite.tasks import _IN_MEMORY_RAG_STATUS
+    cache.delete(f"project_rag_status:{sample_project.id}")
+    _IN_MEMORY_RAG_STATUS.pop(sample_project.id, None)
+
+    sample_project.is_indexed = True
+    sample_project.embedding_model = "gemini-embedding-2"
+    sample_project.save()
+
+    response = auth_client.get(f"/api/projects/{sample_project.id}/index_status/")
+    assert response.status_code == status.HTTP_200_OK
+    data = response.json()
+    assert data["status"] == "completed"
+    assert data["progress"] == 100
+    assert data["is_indexed"] is True
+
+
+@pytest.mark.django_db
 def test_task_interface_view(rf: RequestFactory):
     request = rf.get("/tasks/")
 

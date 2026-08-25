@@ -519,7 +519,8 @@
                 <small style="color: var(--text-muted); font-size: 0.8em;">Used for syncing repo AST. We recommend a fine-grained PAT.</small>
             </div>
             <p id="project-error" style="color: var(--danger); display: none; font-size: 0.9em; margin-bottom: 15px;"></p>
-            <button type="submit" class="btn-primary" style="width: 100%;">Create Project</button>
+            <div id="project-create-status" style="display: none; padding: 8px 12px; border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 0.85em; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); line-height: 1.4;"></div>
+            <button type="submit" id="create-project-submit-btn" class="btn-primary" style="width: 100%;">Create Project</button>
         </form>
     </dialog>
 
@@ -576,6 +577,69 @@
         </div>
     </dialog>
 
+    <!-- RAG Live Activity Side Panel Drawer -->
+    <div id="rag-drawer-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1090; backdrop-filter: blur(2px); transition: opacity 0.3s ease;"></div>
+    <aside id="rag-activity-drawer" style="position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 90vw; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -4px 0 24px rgba(0,0,0,0.3); z-index: 1100; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+        <div style="padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--surface-hover);">
+            <div>
+                <h3 style="margin: 0; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
+                    <span>⚡</span> RAG Indexing Activity
+                </h3>
+                <small id="drawer-project-name" style="color: var(--text-secondary); font-size: 0.85em;">Select a project</small>
+            </div>
+            <button id="close-rag-drawer-btn" style="background: none; border: none; font-size: 1.4em; color: var(--text-secondary); cursor: pointer; line-height: 1;">&times;</button>
+        </div>
+
+        <div style="padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;">
+            <!-- Progress Bar Section -->
+            <div>
+                <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em;">
+                    <span id="drawer-step-label" style="font-weight: 600; color: var(--text-primary);">Idle</span>
+                    <span id="drawer-progress-pct" style="font-weight: 700; color: #3b82f6;">0%</span>
+                </div>
+                <div style="height: 10px; background: var(--surface-hover); border-radius: 999px; overflow: hidden; border: 1px solid var(--border);">
+                    <div id="drawer-progress-bar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #3b82f6, #10b981); border-radius: 999px; transition: width 0.4s ease;"></div>
+                </div>
+            </div>
+
+            <!-- 5-Stage Checklist -->
+            <div style="background: var(--surface-hover); border-radius: var(--radius-sm); padding: 12px 14px; border: 1px solid var(--border); font-size: 0.85em; display: flex; flex-direction: column; gap: 8px;">
+                <div id="stage-item-discover" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <span class="stage-icon">⚪</span> <span>1. Discover Source Files</span>
+                </div>
+                <div id="stage-item-ast" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <span class="stage-icon">⚪</span> <span>2. Parse AST Symbol Tree</span>
+                </div>
+                <div id="stage-item-guardrails" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <span class="stage-icon">⚪</span> <span>3. Apply BPE Token Guardrails</span>
+                </div>
+                <div id="stage-item-embedding" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <span class="stage-icon">⚪</span> <span>4. Batch Vector Embedding (Gemini)</span>
+                </div>
+                <div id="stage-item-chroma" style="display: flex; align-items: center; gap: 8px; color: var(--text-secondary);">
+                    <span class="stage-icon">⚪</span> <span>5. ChromaDB Collection Ready</span>
+                </div>
+            </div>
+
+            <!-- Live Terminal Console -->
+            <div style="flex: 1; display: flex; flex-direction: column; min-height: 240px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <span style="font-size: 0.8em; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Live Execution Logs</span>
+                    <span id="drawer-model-badge" style="font-size: 0.75em; padding: 2px 8px; border-radius: 999px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">gemini-embedding-001</span>
+                </div>
+                <div id="drawer-console-logs" style="flex: 1; max-height: 280px; background: #0d1117; color: #38ef7d; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78em; padding: 12px; border-radius: var(--radius-sm); overflow-y: auto; line-height: 1.5; border: 1px solid rgba(255,255,255,0.1); white-space: pre-wrap; word-break: break-word;">
+                    <div style="color: #8b949e;">[RAG Status] Ready. Trigger project sync or creation to stream live execution logs.</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Floating Quick-Open Button -->
+    <button id="open-rag-drawer-btn" style="position: fixed; bottom: 24px; right: 24px; z-index: 1080; background: var(--surface); color: var(--text-primary); border: 1px solid var(--border); box-shadow: 0 4px 16px rgba(0,0,0,0.25); border-radius: 999px; padding: 10px 18px; font-size: 0.85em; font-weight: 600; cursor: pointer; display: flex; align-items: center; gap: 8px; transition: all 0.2s ease;">
+        <span id="rag-btn-icon">⚡</span>
+        <span id="rag-btn-text">RAG Activity</span>
+    </button>
+
     <script>
         const apiBaseUrl = '/api/tasks/';
         const projectsApiUrl = '/api/projects/';
@@ -625,6 +689,8 @@
         const closeProjectModalBtn = document.getElementById('close-project-modal');
         const createProjectForm = document.getElementById('create-project-form');
         const projectError = document.getElementById('project-error');
+        const projectCreateStatus = document.getElementById('project-create-status');
+        const createProjectSubmitBtn = document.getElementById('create-project-submit-btn');
 
         const astModal = document.getElementById('ast-modal');
         const viewAstBtn = document.getElementById('view-ast-btn');
@@ -635,6 +701,149 @@
         const aiRagIndicator = document.getElementById('ai-rag-indicator');
         const astRagStatus = document.getElementById('ast-rag-status');
         const astRagDetails = document.getElementById('ast-rag-details');
+
+        // RAG Activity Drawer Elements
+        const ragDrawer = document.getElementById('rag-activity-drawer');
+        const ragDrawerBackdrop = document.getElementById('rag-drawer-backdrop');
+        const openRagDrawerBtn = document.getElementById('open-rag-drawer-btn');
+        const closeRagDrawerBtn = document.getElementById('close-rag-drawer-btn');
+        const drawerProjectName = document.getElementById('drawer-project-name');
+        const drawerStepLabel = document.getElementById('drawer-step-label');
+        const drawerProgressPct = document.getElementById('drawer-progress-pct');
+        const drawerProgressBar = document.getElementById('drawer-progress-bar');
+        const drawerConsoleLogs = document.getElementById('drawer-console-logs');
+        const drawerModelBadge = document.getElementById('drawer-model-badge');
+        const stageItemDiscover = document.getElementById('stage-item-discover');
+        const stageItemAst = document.getElementById('stage-item-ast');
+        const stageItemGuardrails = document.getElementById('stage-item-guardrails');
+        const stageItemEmbedding = document.getElementById('stage-item-embedding');
+        const stageItemChroma = document.getElementById('stage-item-chroma');
+        let ragPollingInterval = null;
+
+        function openRagDrawer(projectName = '') {
+            if (ragDrawer) ragDrawer.style.transform = 'translateX(0)';
+            if (ragDrawerBackdrop) ragDrawerBackdrop.style.display = 'block';
+            if (projectName && drawerProjectName) drawerProjectName.textContent = projectName;
+        }
+
+        function closeRagDrawer() {
+            if (ragDrawer) ragDrawer.style.transform = 'translateX(100%)';
+            if (ragDrawerBackdrop) ragDrawerBackdrop.style.display = 'none';
+        }
+
+        if (openRagDrawerBtn) {
+            openRagDrawerBtn.addEventListener('click', () => {
+                const selectedId = projectSelect.value;
+                const project = allProjects.find(p => String(p.id) === selectedId);
+                const projName = project ? project.name : 'Select a project';
+                openRagDrawer(projName);
+                if (project) {
+                    fetchProjectRagStatus(project.id);
+                }
+            });
+        }
+
+        if (closeRagDrawerBtn) closeRagDrawerBtn.addEventListener('click', closeRagDrawer);
+        if (ragDrawerBackdrop) ragDrawerBackdrop.addEventListener('click', closeRagDrawer);
+
+        function updateStageIcons(stage, progress) {
+            const stages = [
+                { el: stageItemDiscover, threshold: 10 },
+                { el: stageItemAst, threshold: 25 },
+                { el: stageItemGuardrails, threshold: 48 },
+                { el: stageItemEmbedding, threshold: 75 },
+                { el: stageItemChroma, threshold: 100 },
+            ];
+
+            stages.forEach(({ el, threshold }) => {
+                if (!el) return;
+                const icon = el.querySelector('.stage-icon');
+                if (progress >= threshold) {
+                    if (icon) icon.textContent = '✅';
+                    el.style.color = 'var(--text-primary)';
+                } else if (progress >= threshold - 15) {
+                    if (icon) icon.textContent = '⏳';
+                    el.style.color = '#3b82f6';
+                } else {
+                    if (icon) icon.textContent = '⚪';
+                    el.style.color = 'var(--text-secondary)';
+                }
+            });
+        }
+
+        function renderDrawerLogs(logs) {
+            if (!drawerConsoleLogs || !logs || logs.length === 0) return;
+            drawerConsoleLogs.innerHTML = logs.map(l => {
+                let color = '#38ef7d'; // green
+                if (l.includes('⚠️') || l.includes('Warning')) color = '#f59e0b'; // amber
+                if (l.includes('❌') || l.includes('failed') || l.includes('Error')) color = '#ef4444'; // red
+                if (l.includes('🚀') || l.includes('🧠') || l.includes('⚡') || l.includes('📁')) color = '#60a5fa'; // blue
+                return `<div style="color: ${color}; margin-bottom: 2px;">${escapeHtml(l)}</div>`;
+            }).join('');
+            drawerConsoleLogs.scrollTop = drawerConsoleLogs.scrollHeight;
+        }
+
+        async function fetchProjectRagStatus(projectId) {
+            try {
+                const res = await fetch(`${projectsApiUrl}${projectId}/index_status/`, {
+                    headers: getAuthHeaders()
+                });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (drawerProgressPct) drawerProgressPct.textContent = `${data.progress}%`;
+                if (drawerProgressBar) drawerProgressBar.style.width = `${data.progress}%`;
+                if (drawerStepLabel) drawerStepLabel.textContent = data.current_step || data.stage;
+                if (drawerModelBadge && data.model) drawerModelBadge.textContent = data.model;
+                updateStageIcons(data.stage, data.progress);
+                renderDrawerLogs(data.logs);
+            } catch (err) {
+                console.warn("Error fetching initial RAG status:", err);
+            }
+        }
+
+        function startRagStatusPolling(projectId, projectName, onDone = null) {
+            if (ragPollingInterval) clearInterval(ragPollingInterval);
+            openRagDrawer(projectName);
+
+            const poll = async () => {
+                try {
+                    const res = await fetch(`${projectsApiUrl}${projectId}/index_status/`, {
+                        headers: getAuthHeaders()
+                    });
+                    if (!res.ok) return;
+                    const data = await res.json();
+
+                    if (drawerProgressPct) drawerProgressPct.textContent = `${data.progress}%`;
+                    if (drawerProgressBar) drawerProgressBar.style.width = `${data.progress}%`;
+                    if (drawerStepLabel) drawerStepLabel.textContent = data.current_step || data.stage;
+                    if (drawerModelBadge && data.model) drawerModelBadge.textContent = data.model;
+
+                    updateStageIcons(data.stage, data.progress);
+                    renderDrawerLogs(data.logs);
+
+                    if (data.status === 'completed' || data.is_indexed) {
+                        clearInterval(ragPollingInterval);
+                        ragPollingInterval = null;
+                        if (drawerProgressPct) drawerProgressPct.textContent = '100%';
+                        if (drawerProgressBar) drawerProgressBar.style.width = '100%';
+                        if (drawerStepLabel) drawerStepLabel.textContent = '✅ Codebase indexing complete!';
+                        updateStageIcons('completed', 100);
+                        if (onDone) onDone(data);
+                    } else if (data.status === 'failed') {
+                        clearInterval(ragPollingInterval);
+                        ragPollingInterval = null;
+                        if (drawerStepLabel) drawerStepLabel.textContent = `❌ ${data.current_step}`;
+                        if (drawerProgressPct) drawerProgressPct.style.color = '#ef4444';
+                        if (onDone) onDone(data);
+                    }
+                } catch (err) {
+                    console.warn("RAG polling error:", err);
+                }
+            };
+
+            poll();
+            ragPollingInterval = setInterval(poll, 1200);
+        }
 
         // Calendar Sync Modal Elements
         const calendarModal = document.getElementById('calendar-modal');
@@ -977,7 +1186,7 @@
                 aiRagIndicator.style.background = 'rgba(40, 167, 69, 0.12)';
                 aiRagIndicator.style.color = '#28a745';
                 aiRagIndicator.style.border = '1px solid rgba(40, 167, 69, 0.25)';
-                aiRagIndicator.innerHTML = `⚡ <strong>RAG Active:</strong> Codebase vector search ready (${project.embedding_model || 'gemini-embedding-2'})`;
+                aiRagIndicator.innerHTML = `⚡ <strong>RAG Active:</strong> Codebase vector search ready (${project.embedding_model || 'gemini-embedding-001'})`;
             } else if (project.github_repo) {
                 aiRagIndicator.style.background = 'rgba(255, 193, 7, 0.12)';
                 aiRagIndicator.style.color = '#ffc107';
@@ -1002,7 +1211,7 @@
                     if (project.is_indexed) {
                         astRagStatus.innerHTML = `<span style="color: #28a745;">🟢 ChromaDB Vector Index: Active</span>`;
                         const lastIndexed = project.last_indexed_at ? new Date(project.last_indexed_at).toLocaleString() : 'Recently';
-                        astRagDetails.textContent = `Model: ${project.embedding_model || 'gemini-embedding-2'} • Collection: ${project.collection_name || 'project_' + project.id} • Last Indexed: ${lastIndexed}`;
+                        astRagDetails.textContent = `Model: ${project.embedding_model || 'gemini-embedding-001'} • Collection: ${project.collection_name || 'project_' + project.id} • Last Indexed: ${lastIndexed}`;
                     } else {
                         astRagStatus.innerHTML = `<span style="color: #ffc107;">⏳ Vector Index: Pending / Not Indexed</span>`;
                         astRagDetails.textContent = `Click "Sync Repo" to trigger background Celery indexing into ChromaDB.`;
@@ -1061,35 +1270,70 @@
             }
         });
 
+        async function waitForProjectIndexing(projectId, maxSeconds = 90, onProgress = null) {
+            const startTime = Date.now();
+            while ((Date.now() - startTime) < maxSeconds * 1000) {
+                await new Promise(r => setTimeout(r, 1500));
+                try {
+                    const res = await fetch(`${projectsApiUrl}${projectId}/`, {
+                        headers: getAuthHeaders()
+                    });
+                    if (res.ok) {
+                        const proj = await res.json();
+                        if (onProgress) onProgress(proj);
+                        if (proj.is_indexed) {
+                            return proj;
+                        }
+                    }
+                } catch (err) {
+                    console.warn("Polling error:", err);
+                }
+            }
+            return null;
+        }
+
         syncRepoBtn.addEventListener('click', async () => {
             const selectedId = projectSelect.value;
             const project = allProjects.find(p => String(p.id) === selectedId);
             if (!project) return;
 
-            const originalText = syncRepoBtn.textContent;
-            syncRepoBtn.textContent = 'Syncing...';
+            const originalText = 'Sync Repo';
+            syncRepoBtn.textContent = '⏳ Syncing...';
             syncRepoBtn.disabled = true;
 
             try {
+                // Open the RAG Activity Drawer immediately
+                openRagDrawer(project.name);
+
                 const response = await fetch(`${projectsApiUrl}${project.id}/sync_repo/`, {
                     method: 'POST',
                     headers: getAuthHeaders(),
-                    body: JSON.stringify({}) // Token falls back to saved token
+                    body: JSON.stringify({})
                 });
 
                 if (response.ok) {
-                    await fetchProjects(); // Refresh to get the new AST
-                    alert('Repository synced successfully!');
+                    await fetchProjects(); // Refresh AST immediately
+                    
+                    // Stream real-time progress and logs from Redis
+                    startRagStatusPolling(project.id, project.name, async (finalData) => {
+                        syncRepoBtn.textContent = '✅ Synced & Indexed!';
+                        await fetchProjects();
+                        setTimeout(() => {
+                            syncRepoBtn.textContent = originalText;
+                            syncRepoBtn.disabled = false;
+                        }, 3000);
+                    });
                 } else if (response.status === 401) {
                     logoutBtn.click();
                 } else {
                     const data = await response.json();
                     alert(`Error syncing: ${data.error || 'Unknown error'}`);
+                    syncRepoBtn.textContent = originalText;
+                    syncRepoBtn.disabled = false;
                 }
             } catch (error) {
                 console.error("Error syncing repo:", error);
                 alert("An error occurred during sync.");
-            } finally {
                 syncRepoBtn.textContent = originalText;
                 syncRepoBtn.disabled = false;
             }
@@ -1115,24 +1359,39 @@
         openProjectModalBtn.addEventListener('click', () => {
             createProjectModal.showModal();
             projectError.style.display = 'none';
+            projectCreateStatus.style.display = 'none';
         });
 
         closeProjectModalBtn.addEventListener('click', () => {
             createProjectModal.close();
             createProjectForm.reset();
+            projectCreateStatus.style.display = 'none';
         });
 
         createProjectForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const name = document.getElementById('project-name').value.trim();
-            const repo = document.getElementById('project-repo').value.trim();
-            const token = document.getElementById('project-token').value.trim();
+            const nameInput = document.getElementById('project-name');
+            const repoInput = document.getElementById('project-repo');
+            const tokenInput = document.getElementById('project-token');
+
+            const name = nameInput.value.trim();
+            const repo = repoInput.value.trim();
+            const token = tokenInput.value.trim();
             
             if (!name) return;
 
             const payload = { name: name };
             if (repo) payload.github_repo = repo;
             if (token) payload.github_token = token;
+
+            projectError.style.display = 'none';
+            projectCreateStatus.style.display = 'block';
+            projectCreateStatus.textContent = repo 
+                ? '🔄 1/2: Connecting to GitHub & extracting AST structure...' 
+                : '🔄 Creating project...';
+            
+            createProjectSubmitBtn.disabled = true;
+            createProjectSubmitBtn.textContent = repo ? '⏳ Connecting & Parsing...' : '⏳ Creating...';
 
             try {
                 const response = await fetch(projectsApiUrl, {
@@ -1142,20 +1401,40 @@
                 });
 
                 if (response.ok) {
+                    const createdProject = await response.json();
+
                     createProjectForm.reset();
+                    projectCreateStatus.style.display = 'none';
                     createProjectModal.close();
-                    await fetchProjects(); // Refresh the dropdowns
+                    
+                    // Select the newly created project in the dropdowns
+                    localStorage.setItem('selected_project', String(createdProject.id));
+                    localStorage.setItem('selected_ai_project', String(createdProject.id));
+                    await fetchProjects();
+                    renderFilteredTasks();
+
+                    // If GitHub repo is attached, open the live RAG drawer and stream indexing
+                    if (repo) {
+                        startRagStatusPolling(createdProject.id, createdProject.name, async () => {
+                            await fetchProjects();
+                        });
+                    }
                 } else if (response.status === 401) {
                     logoutBtn.click();
                 } else {
                     const data = await response.json();
                     projectError.textContent = "Error: " + JSON.stringify(data);
                     projectError.style.display = 'block';
+                    projectCreateStatus.style.display = 'none';
                 }
             } catch (error) {
                 console.error("Error creating project:", error);
                 projectError.textContent = "An error occurred.";
                 projectError.style.display = 'block';
+                projectCreateStatus.style.display = 'none';
+            } finally {
+                createProjectSubmitBtn.disabled = false;
+                createProjectSubmitBtn.textContent = 'Create Project';
             }
         });
 

@@ -88,6 +88,10 @@ def test_fetch_repo_tree_success():
         "tree": [
             {"path": "app/models.py", "type": "blob"},
             {"path": "frontend/index.tsx", "type": "blob"},
+            {"path": "src/main/Game.java", "type": "blob"},
+            {"path": "src/test/GameTest.java", "type": "blob"},
+            {"path": "tests/test_models.py", "type": "blob"},
+            {"path": "node_modules/pkg/index.js", "type": "blob"},
             {"path": "docs/readme.md", "type": "blob"},
             {"path": "src", "type": "tree"},
         ]
@@ -99,6 +103,10 @@ def test_fetch_repo_tree_success():
         files = fetch_repo_tree("owner/repo", github_token="pat123")
         assert "app/models.py" in files
         assert "frontend/index.tsx" in files
+        assert "src/main/Game.java" in files
+        assert "src/test/GameTest.java" not in files
+        assert "tests/test_models.py" not in files
+        assert "node_modules/pkg/index.js" not in files
         assert "docs/readme.md" not in files
 
 

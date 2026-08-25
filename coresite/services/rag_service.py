@@ -1,4 +1,5 @@
 import os
+import time
 from typing import Any, Optional
 from google import genai
 from google.genai import types
@@ -11,8 +12,7 @@ genai_client = genai.Client()
 CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
 CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
 
-PRIMARY_MODEL = "gemini-embedding-2"
-FALLBACK_MODEL = "gemini-embedding-001"
+PRIMARY_MODEL = "gemini-embedding-001"
 
 
 def get_chroma_client():
@@ -37,83 +37,121 @@ def normalize_vector(vec: list[float]) -> list[float]:
 
 
 # ==========================================
-# 1. Embedding Generation with Fallback
+# 1. Embedding Generation (gemini-embedding-001)
 # ==========================================
+
+def embed_code_documents_batch(
+    chunks: list[dict[str, Any]],
+    batch_size: int = 50,
+    model: str = PRIMARY_MODEL,
+    output_dim: int = 768,
+    on_progress: Optional[Any] = None,
+) -> tuple[list[list[float]], str]:
+    """
+    Embeds code chunk dictionaries in batches of up to `batch_size` (e.g. 50 chunks per API call).
+    Uses gemini-embedding-001 native multi-document batching to drastically conserve RPM quotas.
+    Raises exception immediately if embedding fails (no fallback).
+    Returns (list_of_vectors, model_used).
+    """
+    if not chunks:
+        return [], model
+
+    all_vectors: list[list[float]] = []
+    total_batches = (len(chunks) + batch_size - 1) // batch_size
+
+    for batch_num, i in enumerate(range(0, len(chunks), batch_size), 1):
+        batch = chunks[i : i + batch_size]
+        log_msg = f"[RAG Embed Batch] Processing batch {batch_num}/{total_batches} ({len(batch)} chunks) using {model}..."
+        print(log_msg)
+        if on_progress:
+            on_progress(batch_num, total_batches, model, log_msg)
+
+        try:
+            raw_contents = [c.get("text", "") for c in batch]
+            result = genai_client.models.embed_content(
+                model=model,
+                contents=raw_contents,
+                config=types.EmbedContentConfig(
+                    task_type="RETRIEVAL_DOCUMENT",
+                    output_dimensionality=output_dim,
+                ),
+            )
+            embeddings = getattr(result, "embeddings", None)
+            if not embeddings:
+                # In case single object is returned
+                emb = getattr(result, "embedding", None)
+                embeddings = [emb] if emb else []
+
+            batch_vectors = [
+                normalize_vector(emb.values if hasattr(emb, "values") else emb)
+                for emb in embeddings
+            ]
+            all_vectors.extend(batch_vectors)
+
+            # Rate pacing: small 0.5s pause between multi-batch requests
+            if batch_num < total_batches:
+                time.sleep(0.5)
+
+        except Exception as e:
+            err_msg = f"[RAG Embed Batch] ❌ Model {model} failed during batch {batch_num}/{total_batches}: {e}"
+            print(err_msg)
+            if on_progress:
+                on_progress(batch_num, total_batches, model, err_msg)
+            raise e
+
+    return all_vectors, model
+
 
 def embed_code_document(filepath: str, code_chunk: str, model: str = PRIMARY_MODEL, output_dim: int = 768) -> tuple[list[float], str]:
     """
-    Generates embedding for a code chunk using the specified model.
-    Falls back to FALLBACK_MODEL if PRIMARY_MODEL encounters an exception.
+    Convenience helper for embedding a single code chunk.
     Returns (embedding_vector, model_used).
     """
-    models_to_try = [model] if model != PRIMARY_MODEL else [PRIMARY_MODEL, FALLBACK_MODEL]
-
-    for current_model in models_to_try:
-        try:
-            if current_model == "gemini-embedding-2":
-                formatted_doc = f"title: {filepath} | text: {code_chunk}"
-                result = genai_client.models.embed_content(
-                    model=current_model,
-                    contents=formatted_doc,
-                    config=types.EmbedContentConfig(output_dimensionality=output_dim),
-                )
-                return result.embeddings[0].values, current_model
-            else:
-                # gemini-embedding-001
-                result = genai_client.models.embed_content(
-                    model=current_model,
-                    contents=code_chunk,
-                    config=types.EmbedContentConfig(
-                        task_type="RETRIEVAL_DOCUMENT",
-                        output_dimensionality=output_dim,
-                    ),
-                )
-                vector = result.embeddings[0].values
-                return normalize_vector(vector), current_model
-        except Exception as e:
-            print(f"[RAG Embed] ⚠️ Model {current_model} failed ({e}).")
-            if current_model == models_to_try[-1]:
-                raise e
-            print(f"[RAG Embed] 🔄 Falling back to {FALLBACK_MODEL}...")
-            continue
-
-    raise RuntimeError("Failed to generate embedding with any model")
+    vectors, model_used = embed_code_documents_batch(
+        [{"filepath": filepath, "text": code_chunk}],
+        batch_size=1,
+        model=model,
+        output_dim=output_dim,
+    )
+    return vectors[0], model_used
 
 
 def embed_code_query(query: str, model: str = PRIMARY_MODEL, output_dim: int = 768) -> list[float]:
     """
-    Generates embedding for a query using the exact model that indexed the project.
+    Generates embedding for a user prompt query using gemini-embedding-001.
     """
     print(f"[RAG Query] 🔍 Embedding user prompt using {model} (Query: '{query[:60]}...')...")
-    if model == "gemini-embedding-2":
-        formatted_query = f"task: code retrieval | query: {query}"
-        result = genai_client.models.embed_content(
-            model=model,
-            contents=formatted_query,
-            config=types.EmbedContentConfig(output_dimensionality=output_dim),
-        )
-        return result.embeddings[0].values
+    result = genai_client.models.embed_content(
+        model=model,
+        contents=query,
+        config=types.EmbedContentConfig(
+            task_type="CODE_RETRIEVAL_QUERY",
+            output_dimensionality=output_dim,
+        ),
+    )
+    embeddings = getattr(result, "embeddings", None)
+    if embeddings and len(embeddings) > 0:
+        raw_vec = embeddings[0].values if hasattr(embeddings[0], "values") else embeddings[0]
+    elif getattr(result, "embedding", None):
+        raw_vec = result.embedding.values if hasattr(result.embedding, "values") else result.embedding
     else:
-        # gemini-embedding-001
-        result = genai_client.models.embed_content(
-            model=model,
-            contents=query,
-            config=types.EmbedContentConfig(
-                task_type="CODE_RETRIEVAL_QUERY",
-                output_dimensionality=output_dim,
-            ),
-        )
-        vector = result.embeddings[0].values
-        return normalize_vector(vector)
+        raise ValueError(f"No embeddings returned for query by {model}")
+
+    return normalize_vector(raw_vec)
 
 
 # ==========================================
 # 2. Vector Storage & Indexing
 # ==========================================
 
-def index_project_chunks(project_id: int, chunks: list[dict[str, Any]], preferred_model: str = PRIMARY_MODEL) -> tuple[int, str]:
+def index_project_chunks(
+    project_id: int,
+    chunks: list[dict[str, Any]],
+    preferred_model: str = PRIMARY_MODEL,
+    on_progress: Optional[Any] = None,
+) -> tuple[int, str]:
     """
-    Embeds and stores code chunks in ChromaDB.
+    Embeds and stores code chunks in ChromaDB in batches.
     Returns (chunk_count, model_used).
     """
     if not chunks:
@@ -132,34 +170,36 @@ def index_project_chunks(project_id: int, chunks: list[dict[str, Any]], preferre
         metadata={"hnsw:space": "cosine"},
     )
 
-    ids: list[str] = []
-    documents: list[str] = []
-    embeddings: list[list[float]] = []
-    metadatas: list[dict[str, Any]] = []
-    model_used = preferred_model
+    print(f"[RAG Chroma] Batch embedding {len(chunks)} chunks using {preferred_model}...")
+    vectors, model_used = embed_code_documents_batch(
+        chunks,
+        batch_size=50,
+        model=preferred_model,
+        on_progress=on_progress,
+    )
 
-    print(f"[RAG Chroma] Storing {len(chunks)} chunks in collection '{collection_name}'...")
-    for idx, chunk in enumerate(chunks):
-        chunk_id = f"chunk_{project_id}_{idx}"
-        vector, model_used = embed_code_document(chunk["filepath"], chunk["text"], model=model_used)
-
-        ids.append(chunk_id)
-        documents.append(chunk["text"])
-        embeddings.append(vector)
-        metadatas.append({
+    ids = [f"chunk_{project_id}_{idx}" for idx in range(len(chunks))]
+    documents = [chunk["text"] for chunk in chunks]
+    metadatas = [
+        {
             "filepath": chunk["filepath"],
             "symbol_type": chunk.get("symbol_type", ""),
             "start_line": chunk.get("start_line", 0),
             "end_line": chunk.get("end_line", 0),
-        })
+        }
+        for chunk in chunks
+    ]
 
     collection.add(
         ids=ids,
         documents=documents,
-        embeddings=embeddings,
+        embeddings=vectors,
         metadatas=metadatas,
     )
-    print(f"[RAG Chroma] ✅ Successfully indexed {len(chunks)} chunks in '{collection_name}'.")
+    success_log = f"[RAG Chroma] ✅ Successfully indexed {len(chunks)} chunks in '{collection_name}' ({model_used})."
+    print(success_log)
+    if on_progress:
+        on_progress(1, 1, model_used, success_log)
     return len(chunks), model_used
 
 
