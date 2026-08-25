@@ -16,9 +16,9 @@ from coresite.models import Task, Weather
 
 # 3. Initialize FastAPI
 app = FastAPI(
-    title="To-do App",
-    description="FastAPI handling modern endpoints, routing everything else to Django.",
-# 4. Define your FastAPI endpoints here
+    title="TasKode API",
+    description="FastAPI high-performance ASGI endpoints for TasKode, routing everything else to Django.",
+)
 
 
 # CREATE TASK

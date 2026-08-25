@@ -14,7 +14,7 @@ def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
    
     # Use recursive=1 to get all files in all nested folders in one single API call
     url = f"https://api.github.com/repos/{github_repo}/git/trees/main?recursive=1"
-    req = urllib.request.Request(url, headers={"User-Agent": "Django-Ticket-App"})
+    req = urllib.request.Request(url, headers={"User-Agent": "TasKode-App"})
     
     if github_token:
         req.add_header('Authorization', f'Bearer {github_token}')
@@ -58,7 +58,7 @@ def fetch_file_content(github_repo: str, filepath: str, github_token: str = None
     # Attempt to fetch from the 'main' branch first
     raw_url = f"https://raw.githubusercontent.com/{github_repo}/main/{filepath}"
     
-    req = urllib.request.Request(raw_url, headers={"User-Agent": "Django-Ticket-App"})
+    req = urllib.request.Request(raw_url, headers={"User-Agent": "TasKode-App"})
     if github_token:
         req.add_header('Authorization', f'Bearer {github_token}')
         
@@ -69,7 +69,7 @@ def fetch_file_content(github_repo: str, filepath: str, github_token: str = None
         # Fallback: Many older repositories still use 'master' instead of 'main'
         if e.code == 404:
             master_url = f"https://raw.githubusercontent.com/{github_repo}/master/{filepath}"
-            req_master = urllib.request.Request(master_url, headers={"User-Agent": "Django-Ticket-App"})
+            req_master = urllib.request.Request(master_url, headers={"User-Agent": "TasKode-App"})
             if github_token:
                 req_master.add_header('Authorization', f'Bearer {github_token}')
             try:

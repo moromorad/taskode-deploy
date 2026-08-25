@@ -183,8 +183,8 @@ CELERY_BEAT_SCHEDULE = {
 }
 
 SPECTACULAR_SETTINGS = {
-    'TITLE': 'Task App API',
-    'DESCRIPTION': 'API endpoints and schema documentation',
+    'TITLE': 'TasKode API',
+    'DESCRIPTION': 'AI-Powered Task & Repository Intelligence Platform API documentation',
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
