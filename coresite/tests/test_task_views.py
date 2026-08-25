@@ -69,7 +69,8 @@ def test_task_viewset_swagger_fake_view(test_user):
 
 
 @pytest.mark.django_db
-def test_project_viewset_crud_and_autosync(auth_client, test_user):
+@patch("coresite.views.task_views.index_project_codebase.delay")
+def test_project_viewset_crud_and_autosync(mock_delay, auth_client, test_user):
     # Create with github_repo triggering auto-sync
     with patch("coresite.views.task_views.sync_project_ast", return_value="Sync successful") as mock_sync:
         create_resp = auth_client.post("/api/projects/", {
@@ -80,6 +81,7 @@ def test_project_viewset_crud_and_autosync(auth_client, test_user):
         assert create_resp.status_code == status.HTTP_201_CREATED
         project_id = create_resp.json()["id"]
         assert mock_sync.called
+        assert mock_delay.called
 
     # Create with auto-sync raising exception
     with patch("coresite.views.task_views.sync_project_ast", side_effect=Exception("Network error")):
@@ -121,7 +123,8 @@ def test_project_viewset_swagger_fake_view():
 
 
 @pytest.mark.django_db
-def test_project_sync_repo_endpoint_success(auth_client, sample_project):
+@patch("coresite.views.task_views.index_project_codebase.delay")
+def test_project_sync_repo_endpoint_success(mock_delay, auth_client, sample_project):
     with patch("coresite.views.task_views.sync_project_ast", return_value="Sync successful"):
         sample_project.ast_outline = "File: main.py\n  class App"
         sample_project.save()
@@ -133,6 +136,7 @@ def test_project_sync_repo_endpoint_success(auth_client, sample_project):
         data = response.json()
         assert data["status"] == "success"
         assert "main.py" in data["ast_preview"]
+        assert mock_delay.called
 
 
 @pytest.mark.django_db
