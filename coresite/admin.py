@@ -1,6 +1,6 @@
 from django.contrib import admin
 from import_export.admin import ImportExportModelAdmin
-from .models import Task, Project, EmailOTP, UserProfile
+from .models import Task, Project, EmailOTP, UserProfile, CodeChunk
 
 # This registers your model so it shows up in the admin dashboard
 @admin.register(Task)
@@ -31,3 +31,9 @@ class EmailOTPAdmin(admin.ModelAdmin):
 class UserProfileAdmin(admin.ModelAdmin):
     list_display = ('user', 'calendar_token', 'created_at')
     search_fields = ('user__username', 'user__email', 'calendar_token')
+
+@admin.register(CodeChunk)
+class CodeChunkAdmin(admin.ModelAdmin):
+    list_display = ('project', 'filepath', 'symbol_type', 'start_line', 'end_line', 'chunk_id')
+    list_filter = ('symbol_type', 'project')
+    search_fields = ('filepath', 'text', 'chunk_id')

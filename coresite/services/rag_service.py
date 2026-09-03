@@ -4,27 +4,13 @@ from typing import Any, Optional
 from google import genai
 from google.genai import types
 import numpy as np
-import chromadb
+
+from coresite.models import CodeChunk
 
 # Initialize Google GenAI client (reads GEMINI_API_KEY from environment)
 genai_client = genai.Client()
 
-CHROMA_HOST = os.getenv("CHROMA_HOST", "chromadb")
-CHROMA_PORT = int(os.getenv("CHROMA_PORT", "8000"))
-
 PRIMARY_MODEL = "gemini-embedding-001"
-
-
-def get_chroma_client():
-    """
-    Returns an HTTP client for ChromaDB container with fallback to persistent on-disk client.
-    """
-    try:
-        client = chromadb.HttpClient(host=CHROMA_HOST, port=CHROMA_PORT)
-        client.heartbeat()
-        return client
-    except Exception:
-        return chromadb.PersistentClient(path="./chroma_data")
 
 
 def normalize_vector(vec: list[float]) -> list[float]:
@@ -155,7 +141,7 @@ def compute_chunk_content_hash(text: str, filepath: str) -> str:
 
 
 # ==========================================
-# 2. Vector Storage & Indexing
+# 2. Vector Storage & Indexing (PostgreSQL pgvector / SQLite)
 # ==========================================
 
 def index_project_chunks(
@@ -165,109 +151,98 @@ def index_project_chunks(
     on_progress: Optional[Any] = None,
 ) -> tuple[int, str, dict[str, int]]:
     """
-    Incrementally embeds and stores code chunks in ChromaDB:
-    1. Reuses existing collection if present.
-    2. Identifies cached (unchanged), new/modified, and obsolete chunks.
-    3. Re-embeds ONLY new or modified chunks.
-    4. Updates line metadata for line shifts without re-embedding.
-    5. Deletes obsolete chunks from ChromaDB.
+    Incrementally embeds and stores code chunks directly in the database:
+    1. Identifies cached (unchanged), new/modified, and obsolete chunks.
+    2. Re-embeds ONLY new or modified chunks.
+    3. Updates line metadata for line shifts without re-embedding.
+    4. Deletes obsolete chunks from the database.
     Returns (total_active_chunks, model_used, diff_stats).
     """
     diff_stats = {"cached": 0, "new": 0, "deleted": 0, "updated_lines": 0}
     if not chunks:
         return 0, preferred_model, diff_stats
 
-    chroma = get_chroma_client()
-    collection_name = f"project_{project_id}"
-
-    collection = chroma.get_or_create_collection(
-        name=collection_name,
-        metadata={"hnsw:space": "cosine"},
-    )
-
-    # 1. Fetch existing indexed chunks in this collection
-    existing_ids = set()
-    existing_metas = {}
-    try:
-        existing_data = collection.get(include=["metadatas"])
-        if existing_data and "ids" in existing_data:
-            existing_ids = set(existing_data["ids"])
-            for id_, meta in zip(existing_data["ids"], existing_data.get("metadatas", [])):
-                existing_metas[id_] = meta or {}
-    except Exception as e:
-        print(f"[RAG Chroma] Note: could not fetch existing metadata for {collection_name}: {e}")
+    # 1. Fetch existing indexed chunks in this project
+    existing_chunks = {
+        c.chunk_id: c for c in CodeChunk.objects.filter(project_id=project_id)
+    }
 
     # 2. Categorize incoming chunks
     chunks_to_embed = []
-    current_doc_ids = set()
+    current_chunk_ids = set()
 
     for chunk in chunks:
         content_hash = compute_chunk_content_hash(chunk["text"], chunk["filepath"])
-        doc_id = f"chunk_{project_id}_{content_hash}"
-        current_doc_ids.add(doc_id)
+        chunk_id = f"chunk_{project_id}_{content_hash}"
+        current_chunk_ids.add(chunk_id)
 
-        meta = {
-            "filepath": chunk["filepath"],
-            "symbol_type": chunk.get("symbol_type", ""),
-            "start_line": chunk.get("start_line", 0),
-            "end_line": chunk.get("end_line", 0),
-            "content_hash": content_hash,
-        }
+        start_line = chunk.get("start_line", 0)
+        end_line = chunk.get("end_line", 0)
+        symbol_type = chunk.get("symbol_type", "")
 
-        if doc_id in existing_ids:
+        if chunk_id in existing_chunks:
             # Cache hit: unchanged code!
             diff_stats["cached"] += 1
-            old_meta = existing_metas.get(doc_id, {})
-            # If line numbers shifted, update metadata in ChromaDB without re-embedding
-            if (old_meta.get("start_line") != meta["start_line"] or 
-                old_meta.get("end_line") != meta["end_line"]):
-                try:
-                    collection.update(ids=[doc_id], metadatas=[meta])
-                    diff_stats["updated_lines"] += 1
-                except Exception:
-                    pass
+            existing = existing_chunks[chunk_id]
+            # If line numbers shifted, update metadata in DB without re-embedding
+            if existing.start_line != start_line or existing.end_line != end_line:
+                existing.start_line = start_line
+                existing.end_line = end_line
+                existing.save(update_fields=["start_line", "end_line"])
+                diff_stats["updated_lines"] += 1
         else:
             # New or modified code -> needs embedding
             diff_stats["new"] += 1
             chunks_to_embed.append({
-                "id": doc_id,
+                "chunk_id": chunk_id,
                 "text": chunk["text"],
                 "filepath": chunk["filepath"],
-                "metadata": meta,
+                "symbol_type": symbol_type,
+                "start_line": start_line,
+                "end_line": end_line,
+                "content_hash": content_hash,
             })
 
     # 3. Prune obsolete / deleted chunks
-    obsolete_ids = list(existing_ids - current_doc_ids)
+    obsolete_ids = set(existing_chunks.keys()) - current_chunk_ids
     if obsolete_ids:
-        try:
-            collection.delete(ids=obsolete_ids)
-            diff_stats["deleted"] = len(obsolete_ids)
-            print(f"[RAG Chroma] 🗑️ Pruned {len(obsolete_ids)} obsolete chunks from '{collection_name}'.")
-        except Exception as e:
-            print(f"[RAG Chroma] ⚠️ Failed to prune obsolete chunks: {e}")
+        deleted_count, _ = CodeChunk.objects.filter(
+            project_id=project_id, chunk_id__in=obsolete_ids
+        ).delete()
+        diff_stats["deleted"] = deleted_count
+        print(f"[RAG VectorStore] 🗑️ Pruned {deleted_count} obsolete chunks for project {project_id}.")
 
     # 4. Embed ONLY new or modified chunks
     model_used = preferred_model
     if chunks_to_embed:
-        print(f"[RAG Chroma] ⚡ Diff: Embedding {len(chunks_to_embed)} new/modified chunks (Reusing {diff_stats['cached']} cached)...")
+        print(f"[RAG VectorStore] ⚡ Diff: Embedding {len(chunks_to_embed)} new/modified chunks (Reusing {diff_stats['cached']} cached)...")
         vectors, model_used = embed_code_documents_batch(
             [{"filepath": c["filepath"], "text": c["text"]} for c in chunks_to_embed],
             batch_size=50,
             model=preferred_model,
             on_progress=on_progress,
         )
-        collection.upsert(
-            ids=[c["id"] for c in chunks_to_embed],
-            documents=[c["text"] for c in chunks_to_embed],
-            embeddings=vectors,
-            metadatas=[c["metadata"] for c in chunks_to_embed],
-        )
+        new_records = [
+            CodeChunk(
+                project_id=project_id,
+                chunk_id=c["chunk_id"],
+                filepath=c["filepath"],
+                text=c["text"],
+                symbol_type=c["symbol_type"],
+                start_line=c["start_line"],
+                end_line=c["end_line"],
+                content_hash=c["content_hash"],
+                embedding=vectors[idx],
+            )
+            for idx, c in enumerate(chunks_to_embed)
+        ]
+        CodeChunk.objects.bulk_create(new_records)
     else:
-        print(f"[RAG Chroma] ⚡ All {len(chunks)} chunks are up to date! (0 new embeddings required).")
+        print(f"[RAG VectorStore] ⚡ All {len(chunks)} chunks are up to date! (0 new embeddings required).")
         if on_progress:
             on_progress(1, 1, model_used, f"⚡ All {len(chunks)} chunks cached. 0 new embeddings needed.")
 
-    total_active_chunks = len(current_doc_ids)
+    total_active_chunks = len(current_chunk_ids)
     return total_active_chunks, model_used, diff_stats
 
 
@@ -279,57 +254,60 @@ def retrieve_relevant_code_with_metadata(
     project_id: int, query_text: str, model: str = PRIMARY_MODEL, top_k: int = 4
 ) -> tuple[str, list[dict]]:
     """
-    Performs cosine similarity search in ChromaDB using the project's embedding model.
+    Performs cosine similarity search using pgvector (PostgreSQL) with fallback to NumPy (SQLite).
     Returns a tuple of:
     - concatenated prompt context string
     - list of structured chunk dicts containing filepath, lines, code, symbol_type, and distance.
     """
-    chroma = get_chroma_client()
-    collection_name = f"project_{project_id}"
-
-    try:
-        collection = chroma.get_collection(name=collection_name)
-    except Exception:
-        print(f"[RAG Retrieval] ⚠️ Collection '{collection_name}' not found in ChromaDB.")
+    chunk_qs = CodeChunk.objects.filter(project_id=project_id)
+    if not chunk_qs.exists():
+        print(f"[RAG Retrieval] ⚠️ No chunks found for project {project_id}.")
         return "", []
 
     query_vector = embed_code_query(query_text, model=model)
 
-    results = collection.query(
-        query_embeddings=[query_vector],
-        n_results=top_k,
-    )
-
-    if not results or not results.get("documents") or not results["documents"][0]:
-        print(f"[RAG Retrieval] ⚠️ No matching code snippets found in '{collection_name}'.")
-        return "", []
+    from django.db import connection
+    if connection.vendor == "postgresql":
+        from pgvector.django import CosineDistance
+        matched_chunks = list(
+            chunk_qs.annotate(distance=CosineDistance("embedding", query_vector))
+            .order_by("distance")[:top_k]
+        )
+    else:
+        # SQLite / in-memory fallback with NumPy
+        chunks = list(chunk_qs)
+        q_vec = np.array(query_vector, dtype=float)
+        q_norm = np.linalg.norm(q_vec)
+        for c in chunks:
+            c_vec = np.array(c.embedding, dtype=float)
+            c_norm = np.linalg.norm(c_vec)
+            if c_norm == 0 or q_norm == 0:
+                c.distance = 1.0
+            else:
+                sim = np.dot(c_vec, q_vec) / (c_norm * q_norm)
+                c.distance = float(1.0 - sim)
+        matched_chunks = sorted(chunks, key=lambda x: getattr(x, "distance", 1.0))[:top_k]
 
     snippets = []
     chunk_list = []
-    distances = results.get("distances", [[]])[0] if results.get("distances") else []
 
-    for idx, (doc, metadata) in enumerate(zip(results["documents"][0], results["metadatas"][0])):
-        filepath = metadata.get("filepath", "unknown")
-        start_line = metadata.get("start_line", "")
-        end_line = metadata.get("end_line", "")
-        symbol_type = metadata.get("symbol_type", "code")
-        distance = distances[idx] if idx < len(distances) else None
-        line_info = f" (Lines {start_line}-{end_line})" if start_line and end_line else ""
-
+    for c in matched_chunks:
+        line_info = f" (Lines {c.start_line}-{c.end_line})" if c.start_line and c.end_line else ""
         snippets.append(
-            f"--- Code Snippet from {filepath}{line_info} ---\n"
-            f"{doc}\n"
+            f"--- Code Snippet from {c.filepath}{line_info} ---\n"
+            f"{c.text}\n"
         )
+        dist_val = getattr(c, "distance", None)
         chunk_list.append({
-            "filepath": filepath,
-            "start_line": start_line,
-            "end_line": end_line,
-            "symbol_type": symbol_type,
-            "distance": round(distance, 4) if distance is not None else None,
-            "code": doc,
+            "filepath": c.filepath,
+            "start_line": c.start_line,
+            "end_line": c.end_line,
+            "symbol_type": c.symbol_type,
+            "distance": round(float(dist_val), 4) if dist_val is not None else None,
+            "code": c.text,
         })
 
-    print(f"[RAG Retrieval] 🎯 Retrieved {len(snippets)} relevant code snippets from ChromaDB.")
+    print(f"[RAG Retrieval] 🎯 Retrieved {len(snippets)} relevant code snippets from database.")
     return "\n\n".join(snippets), chunk_list
 
 
@@ -337,3 +315,4 @@ def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMAR
     """Convenience wrapper returning concatenated prompt context string."""
     formatted_text, _ = retrieve_relevant_code_with_metadata(project_id, query_text, model=model, top_k=top_k)
     return formatted_text
+

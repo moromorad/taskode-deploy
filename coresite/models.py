@@ -194,3 +194,30 @@ def notify_task_deleted(sender, instance, **kwargs):
     print(f"💥 SIGNAL ALARM: The task '{instance.title}' was just deleted!")
     print("-------------------------------------------------------------\n")
 
+
+from pgvector.django import VectorField
+
+
+class CodeChunk(models.Model):
+    project = models.ForeignKey(
+        Project, on_delete=models.CASCADE, related_name="chunks"
+    )
+    chunk_id = models.CharField(max_length=200, db_index=True)
+    filepath = models.CharField(max_length=500)
+    text = models.TextField()
+    symbol_type = models.CharField(max_length=50, blank=True, default="")
+    start_line = models.IntegerField(default=0)
+    end_line = models.IntegerField(default=0)
+    content_hash = models.CharField(max_length=64, db_index=True)
+    embedding = VectorField(dimensions=768)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["project", "content_hash"]),
+            models.Index(fields=["project", "chunk_id"]),
+        ]
+
+    def __str__(self):
+        return f"{self.filepath}:{self.start_line}-{self.end_line}"
+
+

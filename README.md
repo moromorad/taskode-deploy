@@ -190,7 +190,7 @@ On subsequent repository syncs, the indexing engine computes a deterministic con
 | :--- | :--- |
 | **Backend Frameworks** | Django 6.0, Django REST Framework 3.17 |
 | **Database** | PostgreSQL (`psycopg2-binary`, `dj-database-url`), SQLite (Local fallback) |
-| **Vector Database & RAG** | ChromaDB 1.0 (Persistent Vector Store / HTTP Client) |
+| **Vector Database & RAG** | PostgreSQL `pgvector` (Neon) with NumPy Cosine Similarity fallback |
 | **AI / LLM & Embeddings** | Google GenAI SDK (`gemini-3.6-flash`, `gemini-embedding-001` with MRL 768) |
 | **Code Intelligence** | Tree-sitter (Python, JavaScript, JSX, TypeScript, TSX, Java), Tiktoken (BPE `cl100k_base`) |
 | **Authentication & Security** | SimpleJWT 5.5, Email OTP 2FA, Anon/User Throttling, Password Hashing |
@@ -242,6 +242,17 @@ Stores user settings and private subscription tokens for calendar integrations.
 - `user` (`OneToOneField -> User`): Targeted user account.
 - `calendar_token` (`CharField`): Private 64-character token used for authenticating `.ics` feed subscriptions.
 - `created_at` (`DateTimeField`): Timestamp when profile was created.
+
+### 5. `CodeChunk`
+Stores 768-dimensional vector embeddings and AST code blocks for permanent RAG code search in PostgreSQL (`pgvector`).
+- `project` (`ForeignKey -> Project`): Associated codebase project (with cascade deletion).
+- `chunk_id` (`CharField`): Unique deterministic identifier (`chunk_{project_id}_{content_hash}`).
+- `filepath` (`CharField`): Path to source file within the repository.
+- `text` (`TextField`): Cleaned source code snippet with AST context headers.
+- `symbol_type` (`CharField`): Code construct type (e.g. `Class`, `Function`, `Method`).
+- `start_line` / `end_line` (`IntegerField`): Line range in source file.
+- `content_hash` (`CharField`): SHA-256 fingerprint for incremental cache diffing.
+- `embedding` (`VectorField(768)`): Gemini MRL vector embedding stored natively in PostgreSQL.
 
 
 ---
