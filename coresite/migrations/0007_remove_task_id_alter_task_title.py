@@ -10,13 +10,4 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name='task',
-            name='id',
-        ),
-        migrations.AlterField(
-            model_name='task',
-            name='title',
-            field=models.CharField(max_length=200, primary_key=True, serialize=False, unique=True),
-        ),
     ]
