@@ -135,6 +135,11 @@ class Login2FAView(APIView):
         # Generate new 6-digit OTP and session token
         otp = EmailOTP.generate(user)
 
+        # Print prominently to stdout/logs and logger so it is guaranteed to appear in Render logs
+        import logging
+        print(f"\n{'='*50}\n[2FA AUTH] >>> OTP CODE FOR '{user.username}': {otp.otp_code} <<<\n{'='*50}\n", flush=True)
+        logging.getLogger("django").warning(f"[2FA AUTH] >>> OTP CODE FOR '{user.username}': {otp.otp_code} <<<")
+
         # Send email with OTP code
         subject = "Your Two-Factor Authentication Code"
         message = (
@@ -157,15 +162,16 @@ class Login2FAView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        return Response(
-            {
-                "message": "Verification code sent to your email.",
-                "2fa_required": True,
-                "session_token": otp.session_token,
-                "email": mask_email(user.email),
-            },
-            status=status.HTTP_200_OK,
-        )
+        resp_data = {
+            "message": "Verification code sent to your email.",
+            "2fa_required": True,
+            "session_token": otp.session_token,
+            "email": mask_email(user.email),
+        }
+        if "console.EmailBackend" in settings.EMAIL_BACKEND or settings.DEBUG:
+            resp_data["dev_otp"] = otp.otp_code
+
+        return Response(resp_data, status=status.HTTP_200_OK)
 
 
 class Verify2FAView(APIView):
@@ -275,6 +281,10 @@ class Resend2FAView(APIView):
         user = otp_record.user
         new_otp = EmailOTP.generate(user)
 
+        import logging
+        print(f"\n{'='*50}\n[2FA AUTH RESEND] >>> NEW OTP CODE FOR '{user.username}': {new_otp.otp_code} <<<\n{'='*50}\n", flush=True)
+        logging.getLogger("django").warning(f"[2FA AUTH RESEND] >>> NEW OTP CODE FOR '{user.username}': {new_otp.otp_code} <<<")
+
         subject = "Your New Two-Factor Authentication Code"
         message = (
             f"Hello {user.username},\n\n"
@@ -296,11 +306,12 @@ class Resend2FAView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        return Response(
-            {
-                "message": "A new verification code has been sent to your email.",
-                "session_token": new_otp.session_token,
-                "email": mask_email(user.email),
-            },
-            status=status.HTTP_200_OK,
-        )
+        resp_data = {
+            "message": "A new verification code has been sent to your email.",
+            "session_token": new_otp.session_token,
+            "email": mask_email(user.email),
+        }
+        if "console.EmailBackend" in settings.EMAIL_BACKEND or settings.DEBUG:
+            resp_data["dev_otp"] = new_otp.otp_code
+
+        return Response(resp_data, status=status.HTTP_200_OK)

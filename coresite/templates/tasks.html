@@ -976,16 +976,22 @@
         });
 
         // 2FA Screen Controls
-        function show2FAScreen(sessionToken, maskedEmail) {
+        function show2FAScreen(sessionToken, maskedEmail, devOtp = null) {
             currentSessionToken = sessionToken;
             maskedEmailEl.textContent = maskedEmail || 'your email';
             authTabs.style.display = 'none';
             loginContainer.style.display = 'none';
             registerContainer.style.display = 'none';
             container2fa.style.display = 'block';
-            otpInput.value = '';
+            otpInput.value = devOtp || '';
             error2fa.style.display = 'none';
-            status2fa.style.display = 'none';
+            if (devOtp) {
+                status2fa.style.color = '#38bdf8';
+                status2fa.textContent = `Demo Code: ${devOtp}`;
+                status2fa.style.display = 'block';
+            } else {
+                status2fa.style.display = 'none';
+            }
             startResendCooldown(60);
             setTimeout(() => otpInput.focus(), 100);
         }
@@ -1081,7 +1087,7 @@
                 const data = await response.json();
 
                 if (response.ok && data['2fa_required']) {
-                    show2FAScreen(data.session_token, data.email);
+                    show2FAScreen(data.session_token, data.email, data.dev_otp);
                 } else if (response.ok && data.access) {
                     localStorage.setItem('access_token', data.access);
                     localStorage.setItem('refresh_token', data.refresh);
@@ -1154,7 +1160,8 @@
                 if (response.ok) {
                     currentSessionToken = data.session_token;
                     status2fa.style.color = '#34d399';
-                    status2fa.textContent = "✓ A new verification code has been sent to your email.";
+                    status2fa.textContent = data.dev_otp ? `✓ Code generated: ${data.dev_otp}` : "✓ A new verification code has been sent to your email.";
+                    if (data.dev_otp) otpInput.value = data.dev_otp;
                     status2fa.style.display = 'block';
                     startResendCooldown(60);
                 } else {
