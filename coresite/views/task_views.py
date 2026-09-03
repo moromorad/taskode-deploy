@@ -66,6 +66,28 @@ class TaskViewSet(viewsets.ModelViewSet):
             return Task.objects.none()
         return Task.objects.filter(owner=self.request.user)
 
+    def list(self, request, *args, **kwargs):
+        try:
+            return super().list(request, *args, **kwargs)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": str(e), "traceback": traceback.format_exc()},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
+    def create(self, request, *args, **kwargs):
+        try:
+            return super().create(request, *args, **kwargs)
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            return Response(
+                {"error": str(e), "traceback": traceback.format_exc()},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
+
     def perform_create(self, serializer: BaseSerializer) -> None:
         serializer.save(owner=self.request.user)
 

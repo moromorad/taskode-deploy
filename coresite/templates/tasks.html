@@ -1645,8 +1645,19 @@
                     return;
                 }
                 
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("Error fetching tasks:", response.status, errData);
+                    taskListEl.innerHTML = `<p style="color: #ef4444; padding: 12px; background: rgba(239,68,68,0.1); border-radius: 8px;">Error loading tasks (${response.status}): ${escapeHtml(errData.error || errData.detail || response.statusText)}</p>`;
+                    return;
+                }
+
                 allTasks = await response.json();
-                renderFilteredTasks();
+                if (Array.isArray(allTasks)) {
+                    renderFilteredTasks();
+                } else {
+                    taskListEl.innerHTML = '<p>Error loading tasks.</p>';
+                }
             } catch (error) {
                 console.error("Error fetching tasks:", error);
                 taskListEl.innerHTML = '<p>Error loading tasks.</p>';
@@ -1910,10 +1921,13 @@
                 } else if (response.status === 401) {
                     logoutBtn.click();
                 } else {
-                    console.error("Failed to add task");
+                    const errData = await response.json().catch(() => ({}));
+                    console.error("Failed to add task:", response.status, errData);
+                    alert(`Failed to add task (${response.status}): ${errData.error || errData.detail || JSON.stringify(errData)}`);
                 }
             } catch (error) {
                 console.error("Error adding task:", error);
+                alert("Error adding task: " + error.message);
             }
         });
 
