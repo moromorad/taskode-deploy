@@ -7,6 +7,14 @@ from rest_framework.test import APIClient
 from coresite.models import Project, Task
 
 
+@pytest.fixture(autouse=True)
+def clear_cache_between_tests():
+    from django.core.cache import cache
+    cache.clear()
+    yield
+    cache.clear()
+
+
 @pytest.fixture
 def api_client():
     """Unauthenticated DRF APIClient fixture."""

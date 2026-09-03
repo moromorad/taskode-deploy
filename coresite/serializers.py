@@ -1,7 +1,7 @@
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from rest_framework import serializers
-from .models import Task, Weather, Project, EmailOTP
+from .models import Task, Project, EmailOTP
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -29,11 +29,6 @@ class ProjectSerializer(serializers.ModelSerializer):
             "embedding_model",
         ]
 
-
-class WeatherSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Weather
-        fields = '__all__'
 
 class UserSerializer(serializers.ModelSerializer):
 

@@ -12,6 +12,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 
 import os
 from pathlib import Path
+import dj_database_url
 from dotenv import load_dotenv
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -25,12 +26,14 @@ load_dotenv(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/6.0/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-3n@$lr43im4j*$4m=qh$4kqtn^z2t$#6&y7v)11jjm4*z-**l+'
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-3n@$lr43im4j*$4m=qh$4kqtn^z2t$#6&y7v)11jjm4*z-**l+')
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False').lower() in ('true', '1', 't', 'yes')
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [h.strip() for h in os.getenv('ALLOWED_HOSTS', '*').split(',') if h.strip()]
+
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in os.getenv('CSRF_TRUSTED_ORIGINS', '').split(',') if o.strip()]
 
 
 # Application definition
@@ -105,12 +108,23 @@ WSGI_APPLICATION = 'myproject.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.0/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+if DATABASE_URL:
+    DATABASES = {
+        'default': dj_database_url.parse(
+            DATABASE_URL,
+            conn_max_age=600,
+            conn_health_checks=True,
+        )
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
 
 
 # Password validation
@@ -150,37 +164,44 @@ USE_TZ = True
 STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
-# In settings.py
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/1")
-
-CACHES = {
+STORAGES = {
     "default": {
-        "BACKEND": "django_redis.cache.RedisCache",
-        "LOCATION": REDIS_URL,
-        "OPTIONS": {
-            "CLIENT_CLASS": "django_redis.client.DefaultClient",
-            "IGNORE_EXCEPTIONS": True,
-        }
-    }
-}
-
-# Celery Configuration Options
-CELERY_BROKER_URL = REDIS_URL
-CELERY_RESULT_BACKEND = REDIS_URL
-CELERY_TIMEZONE = TIME_ZONE
-
-# Celery Beat Schedule
-# pyrefly: ignore [missing-import]
-from celery.schedules import crontab
-
-
-CELERY_BEAT_SCHEDULE = {
-    'fetch-weather-every-15-mins': {
-        'task': 'coresite.tasks.fetch_weather_and_cleanup',
-        'schedule': crontab(minute='*/15'), # Runs at 0, 15, 30, and 45 minutes past the hour
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+    },
+    "staticfiles": {
+        "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
     },
 }
+
+# Redis & Cache Configuration
+REDIS_URL = os.getenv("REDIS_URL", "")
+
+if REDIS_URL:
+    CACHES = {
+        "default": {
+            "BACKEND": "django_redis.cache.RedisCache",
+            "LOCATION": REDIS_URL,
+            "OPTIONS": {
+                "CLIENT_CLASS": "django_redis.client.DefaultClient",
+                "IGNORE_EXCEPTIONS": True,
+            }
+        }
+    }
+    CELERY_BROKER_URL = REDIS_URL
+    CELERY_RESULT_BACKEND = REDIS_URL
+    CELERY_TASK_ALWAYS_EAGER = False
+else:
+    CACHES = {
+        "default": {
+            "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+            "LOCATION": "taskode-cache",
+        }
+    }
+    CELERY_BROKER_URL = "memory://"
+    CELERY_RESULT_BACKEND = "cache+memory://"
+    CELERY_TASK_ALWAYS_EAGER = True
+
+CELERY_TIMEZONE = TIME_ZONE
 
 SPECTACULAR_SETTINGS = {
     'TITLE': 'TasKode API',
@@ -188,9 +209,6 @@ SPECTACULAR_SETTINGS = {
     'VERSION': '1.0.0',
     'SERVE_INCLUDE_SCHEMA': False,
 }
-
-
-ALLOWED_HOSTS = ['*']
 
 # Email Configuration (defaults to console backend for local development)
 EMAIL_BACKEND = os.getenv('EMAIL_BACKEND', 'django.core.mail.backends.console.EmailBackend')

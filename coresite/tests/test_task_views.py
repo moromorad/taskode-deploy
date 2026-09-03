@@ -5,7 +5,7 @@ from django.test import RequestFactory
 from django.utils import timezone
 from rest_framework import status
 
-from coresite.models import Project, Task, Weather
+from coresite.models import Project, Task
 from coresite.views.task_views import (
     ProjectViewSet,
     TaskViewSet,
@@ -197,25 +197,9 @@ def test_project_index_status_not_cached(auth_client, sample_project):
 
 @pytest.mark.django_db
 def test_task_interface_view(rf: RequestFactory):
-    request = rf.get("/tasks/")
-
-    # Case 1: 0 weather records
-    Weather.objects.all().delete()
-    resp1 = task_interface(request)
-    assert resp1.status_code == 200
-
-    # Case 2: 2 weather records (< 5)
-    now = timezone.now()
-    Weather.objects.create(temp=20.0, time=now, weather="Sunny", weather_code=0)
-    Weather.objects.create(temp=18.0, time=now, weather="Cloudy", weather_code=2)
-    resp2 = task_interface(request)
-    assert resp2.status_code == 200
-
-    # Case 3: 6 weather records (>= 5)
-    for i in range(4):
-        Weather.objects.create(temp=15.0 + i, time=now, weather="Rain", weather_code=61)
-    resp3 = task_interface(request)
-    assert resp3.status_code == 200
+    request = rf.get("/interface/")
+    resp = task_interface(request)
+    assert resp.status_code == 200
 
 
 @pytest.mark.django_db

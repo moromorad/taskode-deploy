@@ -16,7 +16,7 @@ from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.serializers import BaseSerializer
 
-from ..models import Project, Task, Weather
+from ..models import Project, Task
 from ..serializers import ProjectSerializer, TaskSerializer, UserSerializer
 from ..services import utils
 from ..services.github_parser import sync_project_ast
@@ -318,24 +318,7 @@ class ProjectViewSet(viewsets.ModelViewSet):
 
 
 def task_interface(request: HttpRequest) -> HttpResponse:
-    latest_weather: Optional[Weather] = Weather.objects.first()
-    weather_count: int = Weather.objects.count()
-
-    diff: Optional[float] = None
-    abs_diff: Optional[float] = None
-
-    if weather_count > 1:
-        # If we have at least 5 records, get the 5th (index 4)
-        if weather_count >= 5:
-            past_weather: Weather = Weather.objects.all()[4]
-        # Otherwise, just grab the oldest available record
-        else:
-            past_weather: Weather = Weather.objects.last()
-
-        diff = latest_weather.temp - past_weather.temp
-        abs_diff = abs(diff)
-
-    return render(request, "tasks.html", {"weather": latest_weather, "temp_diff": diff, "abs_diff": abs_diff})
+    return render(request, "tasks.html")
 
 
 @extend_schema(

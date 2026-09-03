@@ -58,7 +58,7 @@ class Task(models.Model):
 
     title = models.CharField(max_length=200)
 
-    description = models.CharField(null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
 
     # Is it done? Defaults to False when created.
     completed = models.BooleanField(default=False)
@@ -91,15 +91,6 @@ class Task(models.Model):
     def __str__(self):
         return self.title   
     
-class Weather(models.Model):
-    temp = models.FloatField()
-    time = models.DateTimeField()
-    weather = models.CharField(max_length=200)
-    weather_code = models.IntegerField(default=0)
-    class Meta:
-        ordering = ['-time'] 
-    def __str__(self):
-        return f"{self.weather} ({self.temp}°C) at {self.time.strftime('%Y-%m-%d %H:%M')}"
 
 
 class EmailOTP(models.Model):

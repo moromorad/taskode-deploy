@@ -73,18 +73,6 @@
         h1 { font-size: 1.75rem; margin-bottom: 20px; }
         h3 { font-size: 1.1rem; margin-bottom: 15px; }
 
-        /* Weather Panel */
-        .weather-panel { 
-            background: var(--surface); 
-            padding: 15px 20px; 
-            border-radius: var(--radius); 
-            margin-bottom: 25px; 
-            text-align: center; 
-            color: var(--text-secondary); 
-            border: 1px solid var(--border); 
-            box-shadow: var(--shadow);
-        }
-        .weather-panel span { font-size: 1.1em; color: var(--text-primary); font-weight: 500; }
 
         /* Layout */
         .app-layout {
@@ -357,29 +345,7 @@
     <div class="container">
         <div class="centered-content">
             <h1 style="text-align: center; letter-spacing: -0.5px;">🚀 TasKode</h1>
-            
-            <div class="weather-panel">
-                {% if weather %}
-                    <div>⛅ Current Weather: {{ weather.weather }}</div>
-                    <div style="margin-top: 5px;">
-                        🌡️ {{ weather.temp }}°C
-                        {% if temp_diff %}
-                            <small style="margin-left: 5px;">
-                            {% if temp_diff > 0 %}
-                                <span style="color: #d32f2f;">(🔺 +{{ abs_diff|floatformat:1 }}°C)</span>
-                            {% elif temp_diff < 0 %}
-                                <span style="color: #1976d2;">(🔻 {{ abs_diff|floatformat:1 }}°C)</span>
-                            {% else %}
-                                <span style="color: #757575;">(➖ No change)</span>
-                            {% endif %}
-                            </small>
-                        {% endif %}
-                    </div>
-                    <div style="font-size: 0.8em; margin-top: 5px; font-weight: normal;">Updated: {{ weather.time|date:"g:i A, M j" }}</div>
-                {% else %}
-                    <span>Weather data is not available yet. (Run the Celery task!)</span>
-                {% endif %}
-            </div>
+
         </div>
         
     <div id="auth-section" class="centered-content" style="display: none;">

@@ -2,7 +2,7 @@ import pytest
 from django.contrib.auth.models import User
 from rest_framework.exceptions import ValidationError
 
-from coresite.models import EmailOTP, Project, Task, Weather
+from coresite.models import EmailOTP, Project, Task
 from coresite.serializers import (
     Login2FASerializer,
     ProjectSerializer,
@@ -11,7 +11,6 @@ from coresite.serializers import (
     TaskSerializer,
     UserSerializer,
     Verify2FASerializer,
-    WeatherSerializer,
 )
 
 
@@ -33,19 +32,6 @@ def test_project_serializer(sample_project, sample_task):
     assert data["name"] == sample_project.name
     assert len(data["tasks"]) == 1
 
-
-@pytest.mark.django_db
-def test_weather_serializer():
-    from django.utils import timezone
-    weather = Weather.objects.create(
-        temp=20.0,
-        time=timezone.now(),
-        weather="Clear sky",
-        weather_code=0,
-    )
-    serializer = WeatherSerializer(instance=weather)
-    assert serializer.data["temp"] == 20.0
-    assert serializer.data["weather"] == "Clear sky"
 
 
 @pytest.mark.django_db

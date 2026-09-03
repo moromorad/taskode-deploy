@@ -3,7 +3,7 @@ import pytest
 from django.contrib.auth.models import User
 from django.utils import timezone
 
-from coresite.models import EmailOTP, Project, Task, UserProfile, Weather
+from coresite.models import EmailOTP, Project, Task, UserProfile
 
 
 @pytest.mark.django_db
@@ -32,18 +32,6 @@ def test_task_model_str_and_delete_signal(test_user, sample_project):
     # Trigger post_delete signal
     task.delete()
 
-
-@pytest.mark.django_db
-def test_weather_model_str():
-    now = timezone.now()
-    weather = Weather.objects.create(
-        temp=25.5,
-        time=now,
-        weather="Mainly clear",
-        weather_code=1,
-    )
-    expected_str = f"Mainly clear (25.5°C) at {now.strftime('%Y-%m-%d %H:%M')}"
-    assert str(weather) == expected_str
 
 
 @pytest.mark.django_db

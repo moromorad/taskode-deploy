@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: taskode-web
+    env: python
+    plan: free
+    region: frankfurt  # or oregon / ohio
+    buildCommand: "pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate"
+    startCommand: "gunicorn myproject.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 2"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: DEBUG
+        value: "False"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ALLOWED_HOSTS
+        value: ".onrender.com,localhost"
+      - key: CSRF_TRUSTED_ORIGINS
+        value: "https://*.onrender.com"
+      # Set DATABASE_URL in Render Dashboard to your Neon PostgreSQL connection string
+      - key: DATABASE_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

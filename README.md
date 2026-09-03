@@ -1,6 +1,6 @@
 # 🚀 TasKode — AI-Powered Task & Repository Intelligence Platform
 
-A modern, full-stack developer task management and ticket intelligence platform built with **Django 6.0**, **Django REST Framework (DRF)**, **FastAPI (ASGI hybrid)**, **Celery 5.6**, **Redis**, **Tree-sitter AST parsing**, **ChromaDB Vector Store**, and **Google Gemini 3.6 Flash & Embedding-001**.
+A modern, full-stack developer task management and ticket intelligence platform built with **Django 6.0**, **Django REST Framework (DRF)**, **Celery 5.6**, **Redis**, **Tree-sitter AST parsing**, **ChromaDB Vector Store**, and **Google Gemini 3.6 Flash & Embedding-001**.
 
 The platform bridges codebases and project management by extracting repository structure outlines (AST) and deep semantic vector embeddings directly from GitHub, enabling Generative AI to produce actionable, context-aware engineering tickets with step-by-step subtasks, deadlines, and file references.
 
@@ -16,9 +16,9 @@ The platform bridges codebases and project management by extracting repository s
 - **📊 Real-Time Repository Sync Activity Drawer:** Slide-out drawer in the Web UI with an animated progress bar, 5-stage live status checklist (`discovering`, `ast_parsing`, `guardrails`, `batch_embedding`, `completed`), rolling dark-mode terminal logs, and live Redis task polling.
 - **📅 Calendar Integration & iCal/Webcal Feeds:** Generates RFC 5545 `.ics` feeds for calendar clients (Apple Calendar, Apple Reminders, Google Calendar, Outlook) with private token authentication and instant token revocation.
 - **🔐 Secure 2FA Authentication Flow:** Two-step login with 6-digit email OTP (5-minute expiry, rate-limited attempts, session tokens, email masking) + JWT access and refresh tokens (`djangorestframework-simplejwt`).
-- **⚡ Dual-Engine API Architecture:** Standard Django REST Framework endpoints alongside high-performance **FastAPI** ASGI routes sharing the same Django ORM and Pydantic schemas.
-- **⏰ Asynchronous Background Tasks & Cron:** Background repository indexing and periodic weather telemetry powered by **Celery Worker**, **Celery Beat**, and **Redis**.
+- **⏰ Asynchronous Background Indexing:** Non-blocking repository AST extraction and vector embedding powered by **Celery Worker** and **Redis**.
 - **📖 Interactive OpenAPI 3.0 Documentation:** Fully typed Swagger UI and OpenAPI schema documentation powered by `drf-spectacular`.
+- **☁️ Cloud-Ready Architecture:** Designed for $0/month deployment on **Render** (Web App) + **Neon** (PostgreSQL) with WhiteNoise static serving.
 
 ---
 
@@ -29,9 +29,8 @@ graph TD
     Client["Client / Web Browser / Calendar Apps"]
 
     subgraph WebServer["Web & Application Layer"]
-        Gunicorn["Gunicorn / Uvicorn Server"]
+        Gunicorn["Gunicorn Production Server"]
         DRF["Django REST Framework (/api/)"]
-        FastAPI["FastAPI ASGI (/fast/)"]
         Swagger["Swagger UI Docs (/api/docs/)"]
         CalendarFeed["Calendar Sync Feed (/api/calendar/)"]
         Auth["2FA OTP & SimpleJWT Auth"]
@@ -41,14 +40,12 @@ graph TD
 
     subgraph Workers["Background Tasks & Celery Workers"]
         CeleryWorker["Celery Worker"]
-        CeleryBeat["Celery Beat Scheduler"]
         IndexTask["Codebase Indexing Task"]
-        WeatherTask["Weather Telemetry Task"]
     end
 
     subgraph DataStore["Data & Vector Stores"]
         Redis[(Redis Broker & Cache)]
-        DB[(SQLite Database)]
+        DB[(PostgreSQL / SQLite Database)]
         ChromaDB[(ChromaDB Vector Store)]
     end
 
@@ -56,13 +53,11 @@ graph TD
         GeminiFlash["Google Gemini 3.6 Flash"]
         GeminiEmbed["Google Gemini Embedding-001 (MRL 768)"]
         GitHub["GitHub REST API"]
-        OpenMeteo["Open-Meteo Weather API"]
     end
 
     Client -->|"HTTP / Web UI"| Gunicorn
     Client -->|"Webcal / .ics Subscription"| CalendarFeed
     Gunicorn --> DRF
-    Gunicorn --> FastAPI
     Gunicorn --> Swagger
 
     DRF --> Auth
@@ -70,7 +65,6 @@ graph TD
     DRF --> RAGEngine
     DRF --> CalendarFeed
 
-    FastAPI --> DB
     DRF --> DB
     DRF --> Redis
 
@@ -84,11 +78,6 @@ graph TD
     IndexTask -->|"Batch Embed (768-dim)"| GeminiEmbed
     IndexTask -->|"Store Vectors & Metadata"| ChromaDB
     IndexTask -->|"Stream Progress & Logs"| Redis
-
-    CeleryBeat -->|"Periodic Telemetry"| CeleryWorker
-    CeleryWorker --> WeatherTask
-    WeatherTask -->|"Fetch Forecast"| OpenMeteo
-    WeatherTask -->|"Store Records"| DB
 ```
 
 ---
@@ -199,17 +188,18 @@ On subsequent repository syncs, the indexing engine computes a deterministic con
 
 | Layer | Technologies |
 | :--- | :--- |
-| **Backend Frameworks** | Django 6.0, Django REST Framework 3.17, FastAPI 0.111 (ASGI) |
+| **Backend Frameworks** | Django 6.0, Django REST Framework 3.17 |
+| **Database** | PostgreSQL (`psycopg2-binary`, `dj-database-url`), SQLite (Local fallback) |
 | **Vector Database & RAG** | ChromaDB 1.0 (Persistent Vector Store / HTTP Client) |
 | **AI / LLM & Embeddings** | Google GenAI SDK (`gemini-3.6-flash`, `gemini-embedding-001` with MRL 768) |
 | **Code Intelligence** | Tree-sitter (Python, JavaScript, JSX, TypeScript, TSX, Java), Tiktoken (BPE `cl100k_base`) |
 | **Authentication & Security** | SimpleJWT 5.5, Email OTP 2FA, Anon/User Throttling, Password Hashing |
 | **Calendar Synchronization** | `icalendar` (RFC 5545 iCalendar / Webcal `.ics` feed generation) |
-| **Async Tasks & Queues** | Celery 5.6, Celery Beat, Redis 8.0, django-redis 7.0 |
+| **Async Tasks & Queues** | Celery 5.6, Redis 8.0, django-redis 7.0 |
 | **API Documentation** | drf-spectacular (OpenAPI 3.0+, Swagger UI) |
 | **Data Validation** | Pydantic v2 (`schemas.py`), DRF Serializers |
 | **Frontend UI** | Vanilla HTML5 / ES6 JavaScript / CSS3 (Sterile Dark Theme, Live Activity Drawer) |
-| **DevOps & Containerization** | Docker, Docker Compose, Gunicorn, Uvicorn, ChromaDB Server |
+| **DevOps & Hosting** | Docker, Docker Compose, Gunicorn, WhiteNoise, Render, Neon |
 
 ---
 
@@ -253,12 +243,6 @@ Stores user settings and private subscription tokens for calendar integrations.
 - `calendar_token` (`CharField`): Private 64-character token used for authenticating `.ics` feed subscriptions.
 - `created_at` (`DateTimeField`): Timestamp when profile was created.
 
-### 5. `Weather`
-Stores scheduled weather records for dashboard telemetry.
-- `temp` (`FloatField`): Temperature in Celsius.
-- `time` (`DateTimeField`): Measurement timestamp.
-- `weather` (`CharField`): Human-readable weather description.
-- `weather_code` (`IntegerField`): WMO weather code from Open-Meteo.
 
 ---
 
@@ -306,15 +290,6 @@ Stores scheduled weather records for dashboard telemetry.
 | `POST` | `/api/calendar/token/refresh/` | Regenerate calendar token and invalidate previous subscription URLs |
 | `GET` | `/api/calendar/feed/{token}.ics` | Public iCal feed endpoint accessed by calendar clients (Google Calendar, Apple Reminders) |
 
-### ⚡ FastAPI ASGI Routes (`/fast/`)
-
-| Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/fast/tasks` | High-performance ASGI read of all tasks |
-| `GET` | `/fast/tasks/{id}` | Read single task by ID |
-| `POST` | `/fast/tasks/` | Create task via Pydantic model validation |
-| `PUT` | `/fast/tasks/{id}` | Update task via Pydantic model validation |
-| `DELETE` | `/fast/tasks/{id}` | Delete task |
 
 ### 📖 System & Documentation
 
@@ -358,14 +333,42 @@ DEFAULT_FROM_EMAIL=your-email@gmail.com
 
 ---
 
-## 🚀 Getting Started
+## 🚀 Getting Started & Deployment
 
-### Option A: Docker Compose (Recommended)
+### Option A: 100% Free Online Deployment (Render + Neon)
 
-Docker Compose automatically spins up the **Web App (Gunicorn/Django)**, **ChromaDB Vector Store**, **Redis Broker**, **Celery Worker**, and **Celery Beat**:
+This project is optimized for a **$0/month** deployment on **Render** (Web App) + **Neon** (PostgreSQL):
+
+#### Step 1: Create a Free PostgreSQL Database on Neon
+1. Go to [Neon.tech](https://neon.tech) and create a free account (no credit card required).
+2. Create a new project named `taskode`.
+3. Copy your **Postgres Connection URI** (e.g. `postgresql://user:password@ep-xyz.neon.tech/neondb?sslmode=require`).
+
+#### Step 2: Deploy to Render
+1. Push your repository to GitHub.
+2. Sign up on [Render.com](https://render.com) and create a new **Web Service**.
+3. Connect your GitHub repository.
+4. Set the following build and start configurations (or select the included `Procfile` / `render.yaml`):
+   - **Environment:** `Python 3`
+   - **Build Command:** `pip install -r requirements.txt && python manage.py collectstatic --noinput && python manage.py migrate`
+   - **Start Command:** `gunicorn myproject.wsgi:application --bind 0.0.0.0:$PORT --workers 2 --threads 2`
+5. In **Environment Variables**, add:
+   - `DATABASE_URL`: *(Paste your Neon connection string from Step 1)*
+   - `SECRET_KEY`: *(Generate a secure random string)*
+   - `DEBUG`: `False`
+   - `ALLOWED_HOSTS`: `.onrender.com,localhost`
+   - `CSRF_TRUSTED_ORIGINS`: `https://*.onrender.com`
+   - `GEMINI_API_KEY`: *(Your Google Gemini API Key)*
+6. Click **Deploy Web Service**. Render will build the app, run migrations against your Neon database, compress static files with WhiteNoise, and launch Gunicorn!
+
+---
+
+### Option B: Local Docker Compose
+
+Docker Compose spins up the **Web App (Gunicorn/Django)**, **ChromaDB Vector Store**, **Redis Broker**, and **Celery Worker**:
 
 ```bash
-# 1. Build and start all 5 services in the background
+# 1. Build and start all services in the background
 docker compose up --build -d
 
 # 2. Check running container status
@@ -375,7 +378,7 @@ docker compose ps
 docker compose logs -f web celery_worker chromadb
 ```
 
-### Option B: Local Virtual Environment Setup
+### Option C: Local Virtual Environment Setup
 
 ```bash
 # 1. Clone the repository and enter directory

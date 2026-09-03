@@ -2,51 +2,14 @@ from typing import Any, Optional
 from ast import parse
 from celery import shared_task
 from django.core.cache import cache
-from .models import Weather, Project
-import requests
-from .services.utils import get_weather_category
-from django.utils.dateparse import parse_datetime
+from .models import Project
 from django.utils import timezone
 
 from .services.github_parser import fetch_file_content, fetch_repo_tree
 from .services.rag_chunker import chunk_with_bpe_guardrails, extract_ast_code_blocks
 from .services.rag_service import index_project_chunks
 
-MAX_RECORDS: int = 1000
 _IN_MEMORY_RAG_STATUS: dict[int, dict] = {}
-
-
-@shared_task
-def fetch_weather_and_cleanup() -> None:
-    url: str = "https://api.open-meteo.com/v1/forecast?latitude=30.0626&longitude=31.2497&current=temperature_2m,weather_code&timezone=Africa%2FCairo"
-    response: dict[str, Any] = requests.get(url).json()
-    
-    current_weather: dict[str, Any] = response.get('current', {})
-    current_temp: Optional[float] = current_weather.get('temperature_2m')
-    weathercode: Optional[int] = current_weather.get('weather_code')
-    current_time: Optional[str] = current_weather.get('time')
-    
-    
-    weather_desc: str = get_weather_category(weathercode)
-    
-   
-    if current_temp is not None:
-        Weather.objects.create(
-            temp=current_temp,
-            weather=weather_desc,
-            time=parse_datetime(current_time) if current_time else timezone.now(),
-            weather_code = weathercode
-        )
-        print(f"Weather Created: {current_temp} {weather_desc} {parse_datetime(current_time)}")
-    
-    
-    MAX_RECORDS: int = 1000
-    
-
-    old_records = Weather.objects.all()[MAX_RECORDS:].values_list('id', flat=True)
-    
-    if old_records:
-        Weather.objects.filter(id__in=old_records).delete()
 
 
 def update_project_progress(

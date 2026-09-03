@@ -9,6 +9,7 @@ ENV PYTHONUNBUFFERED=1
 RUN apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     g++ \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 4. Set directory inside container
@@ -24,5 +25,5 @@ COPY . /app/
 # 6. Expose the port Django runs on
 EXPOSE 8000
 
-# New line: This tells Docker to spin up a shell, run migrations, and then start the server
-CMD ["sh", "-c", "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"]
+# Start production server with migrations and static collection
+CMD ["sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && gunicorn myproject.wsgi:application --bind 0.0.0.0:8000 --workers 2 --threads 2"]
