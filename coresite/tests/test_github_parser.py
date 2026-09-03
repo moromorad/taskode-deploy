@@ -91,6 +91,9 @@ def test_fetch_repo_tree_success():
             {"path": "src/main/Game.java", "type": "blob"},
             {"path": "src/test/GameTest.java", "type": "blob"},
             {"path": "tests/test_models.py", "type": "blob"},
+            {"path": "coresite/migrations/0001_initial.py", "type": "blob"},
+            {"path": "frontend/bundle.min.js", "type": "blob"},
+            {"path": "types/index.d.ts", "type": "blob"},
             {"path": "node_modules/pkg/index.js", "type": "blob"},
             {"path": "docs/readme.md", "type": "blob"},
             {"path": "src", "type": "tree"},
@@ -106,6 +109,9 @@ def test_fetch_repo_tree_success():
         assert "src/main/Game.java" in files
         assert "src/test/GameTest.java" not in files
         assert "tests/test_models.py" not in files
+        assert "coresite/migrations/0001_initial.py" not in files
+        assert "frontend/bundle.min.js" not in files
+        assert "types/index.d.ts" not in files
         assert "node_modules/pkg/index.js" not in files
         assert "docs/readme.md" not in files
 

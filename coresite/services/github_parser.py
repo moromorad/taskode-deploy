@@ -37,9 +37,25 @@ def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
     # Only keep production code files (blobs) that end with our target extensions
     valid_extensions = ('.py', '.js', '.jsx', '.ts', '.tsx', '.java')
     ignored_patterns = (
-        'test/', 'tests/', '__tests__/', 'spec/', 'specs/',
-        '/test', '/tests', 'test_', '_test.', '.test.', '.spec.', 'test.java', 'tests.java',
-        'node_modules/', 'dist/', 'build/', 'target/', 'vendor/', '.venv/', 'venv/',
+        # Tests & Specs
+        "test/", "tests/", "__tests__/", "spec/", "specs/",
+        "/test", "/tests", "test_", "_test.", ".test.", ".spec.", "test.java", "tests.java",
+        
+        # Database Migrations (Schema diffs without business logic)
+        "migrations/", "/migrations", "alembic/", "prisma/migrations/", "flyway/", "liquibase/", "db/migrate/",
+        
+        # Minified, Bundled & TypeScript Declaration files
+        ".min.js", ".min.", ".bundle.js", ".d.ts",
+        
+        # Package managers, Build outputs & Framework caches
+        "node_modules/", "dist/", "build/", "target/", "vendor/",
+        ".next/", ".nuxt/", ".svelte-kit/", ".out/", "out/", "staticfiles/",
+        
+        # Virtual environments
+        ".venv/", "venv/", "env/", ".env/",
+        
+        # Code coverage & Generated codegen stubs
+        "coverage/", ".nyc_output/", "__generated__/",
     )
 
     def is_valid_source_file(path: str) -> bool:
