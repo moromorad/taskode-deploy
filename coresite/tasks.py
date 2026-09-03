@@ -141,16 +141,21 @@ def index_project_codebase(project_id: int, github_token: str = None) -> str:
     all_raw_blocks = []
     target_files = code_files[:30]
     for idx, filepath in enumerate(target_files, 1):
+        pct = 15 + int((idx / len(target_files)) * 30)  # 15% -> 45%
         code = fetch_file_content(project.github_repo, filepath, token)
         if not code:
+            skip_log = f"[RAG Indexing]   ↳ Skipped {filepath} (Empty, rate-limited, or inaccessible)"
+            print(skip_log)
+            update_project_progress(project.id, pct, "ast_parsing", f"Processing {filepath} ({idx}/{len(target_files)})", skip_log)
             continue
         blocks = extract_ast_code_blocks(code, filepath)
         if blocks:
             parse_log = f"[RAG Indexing]   ↳ Parsed {filepath}: {len(blocks)} AST blocks found."
-            print(parse_log)
-            pct = 15 + int((idx / len(target_files)) * 30)  # 15% -> 45%
-            update_project_progress(project.id, pct, "ast_parsing", f"Parsed {filepath} ({idx}/{len(target_files)})", parse_log)
-        all_raw_blocks.extend(blocks)
+            all_raw_blocks.extend(blocks)
+        else:
+            parse_log = f"[RAG Indexing]   ↳ Parsed {filepath}: 0 blocks (no top-level classes/functions)."
+        print(parse_log)
+        update_project_progress(project.id, pct, "ast_parsing", f"Parsed {filepath} ({idx}/{len(target_files)})", parse_log)
 
     if not all_raw_blocks:
         no_ast_log = f"[RAG Indexing] ⚠️ No AST code blocks extracted for '{project.name}'."

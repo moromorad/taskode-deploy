@@ -1,0 +1,836 @@
+{
+  "info": {
+    "name": "TasKode API",
+    "description": "# TasKode REST API Collection\n\nAI-powered Task & Repository Intelligence Platform built with Django REST Framework, Gemini AI, Celery, and ChromaDB.\n\n## Quick Start\n1. Run **Authentication > Obtain JWT Token Pair (Direct)** with your username and password.\n2. The `access_token` and `refresh_token` will be **automatically saved** into collection variables via the Post-response test script.\n3. All other requests inherit the Bearer token automatically!",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{access_token}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://127.0.0.1:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refresh_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "session_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "task_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "project_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "calendar_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Authentication",
+      "item": [
+        {
+          "name": "Obtain JWT Token Pair (Direct Login)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test(\"Has access and refresh tokens\", function () {",
+                  "    const jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('access');",
+                  "    pm.expect(jsonData).to.have.property('refresh');",
+                  "",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.access);",
+                  "    pm.collectionVariables.set(\"refresh_token\", jsonData.refresh);",
+                  "    console.log(\"[TasKode] Successfully refreshed collection access_token & refresh_token\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/token/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "token", ""]
+            },
+            "description": "Direct JWT login endpoint bypassing 2FA. Sets the JWT access and refresh tokens in collection variables."
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh JWT Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.access) {",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.access);",
+                  "    console.log(\"[TasKode] Access token successfully refreshed!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refresh_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/token/refresh/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "token", "refresh", ""]
+            },
+            "description": "Exchange a valid refresh token for a new JWT access token."
+          },
+          "response": []
+        },
+        {
+          "name": "Register New User",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.access) {",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.access);",
+                  "    pm.collectionVariables.set(\"refresh_token\", jsonData.refresh);",
+                  "    console.log(\"[TasKode] Registered and stored JWT tokens!\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"testuser_{{$randomInt}}\",\n  \"email\": \"testuser_{{$randomInt}}@example.com\",\n  \"password\": \"TasKodePass123!\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/register/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "register", ""]
+            },
+            "description": "Creates a new user account and directly returns access and refresh tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "2FA Step 1: Initiate Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.session_token) {",
+                  "    pm.collectionVariables.set(\"session_token\", jsonData.session_token);",
+                  "    console.log(\"[TasKode] Stored 2FA session_token: \" + jsonData.session_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"admin123\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/login/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "login", ""]
+            },
+            "description": "Authenticates user credentials, generates a 6-digit OTP sent via email (or logged to console in dev mode), and returns a session_token."
+          },
+          "response": []
+        },
+        {
+          "name": "2FA Step 2: Verify OTP Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.access) {",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.access);",
+                  "    pm.collectionVariables.set(\"refresh_token\", jsonData.refresh);",
+                  "    console.log(\"[TasKode] 2FA verified successfully! Tokens updated.\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_token\": \"{{session_token}}\",\n  \"otp\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/2fa/verify/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "2fa", "verify", ""]
+            },
+            "description": "Verifies the 6-digit OTP code against the session token. Upon success, issues JWT tokens."
+          },
+          "response": []
+        },
+        {
+          "name": "2FA: Resend OTP Code",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.session_token) {",
+                  "    pm.collectionVariables.set(\"session_token\", jsonData.session_token);",
+                  "    console.log(\"[TasKode] Stored new session_token after resend: \" + jsonData.session_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"session_token\": \"{{session_token}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/2fa/resend/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "2fa", "resend", ""]
+            },
+            "description": "Resends a new 6-digit OTP code using an existing session token."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Projects",
+      "item": [
+        {
+          "name": "List Projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (Array.isArray(jsonData) && jsonData.length > 0) {",
+                  "    pm.collectionVariables.set(\"project_id\", jsonData[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", ""]
+            },
+            "description": "Returns all projects owned by the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Project",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set(\"project_id\", jsonData.id);",
+                  "    console.log(\"[TasKode] Created project ID: \" + jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"TasKode Platform {{$randomInt}}\",\n  \"github_repo\": \"pallets/flask\",\n  \"github_token\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", ""]
+            },
+            "description": "Creates a new project and triggers an initial AST sync and background Celery indexing if a GitHub repo is specified."
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve Project",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{project_id}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{project_id}}", ""]
+            },
+            "description": "Returns details of a specific project by ID, including its AST outline, indexing status, and associated tasks."
+          },
+          "response": []
+        },
+        {
+          "name": "Sync Repository AST & Vectors",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"github_token\": \"\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{project_id}}/sync_repo/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{project_id}}", "sync_repo", ""]
+            },
+            "description": "Fetches repository code from GitHub, parses AST tree outlines, and queues Celery background embedding into ChromaDB."
+          },
+          "response": []
+        },
+        {
+          "name": "Get Live Indexing Status & Logs",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{project_id}}/index_status/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{project_id}}", "index_status", ""]
+            },
+            "description": "Polls real-time RAG indexing progress, stage, step, and live logs from Redis cache."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Project (Partial)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Project Name\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{project_id}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{project_id}}", ""]
+            },
+            "description": "Partially updates an existing project."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Project",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/projects/{{project_id}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "projects", "{{project_id}}", ""]
+            },
+            "description": "Deletes a specific project."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Tasks",
+      "item": [
+        {
+          "name": "List Tasks",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (Array.isArray(jsonData) && jsonData.length > 0) {",
+                  "    pm.collectionVariables.set(\"task_id\", jsonData[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", ""]
+            },
+            "description": "Returns all tasks owned by the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Create Task (Manual)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set(\"task_id\", jsonData.id);",
+                  "    console.log(\"[TasKode] Created task ID: \" + jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Implement Postman CI test automation pipeline\",\n  \"description\": \"Integrate Newman with GitHub Actions to run the API test suite on every PR\",\n  \"due_date\": \"2026-10-15T18:00:00Z\",\n  \"completed\": false,\n  \"ticket_type\": \"feature\",\n  \"subtasks\": [\n    {\"title\": \"Export Postman collection and environment\", \"completed\": true},\n    {\"title\": \"Create .github/workflows/newman.yml\", \"completed\": false}\n  ],\n  \"project\": {{project_id}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", ""]
+            },
+            "description": "Creates a new task assigned to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "Generate Task via AI (Gemini RAG)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.task && jsonData.task.id) {",
+                  "    pm.collectionVariables.set(\"task_id\", jsonData.task.id);",
+                  "    console.log(\"[TasKode] AI created task ID: \" + jsonData.task.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"Fix database pool timeout in Celery worker by tomorrow at 5pm\",\n  \"timezone\": \"UTC\",\n  \"project_id\": {{project_id}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/gen/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "gen", ""]
+            },
+            "description": "Parses a natural language instruction using Gemini AI and injects RAG code chunks from the project vector store."
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve Task",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{task_id}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{task_id}}", ""]
+            },
+            "description": "Returns details of a specific task by ID."
+          },
+          "response": []
+        },
+        {
+          "name": "Partially Update Task (Toggle Completed)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"completed\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{task_id}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{task_id}}", ""]
+            },
+            "description": "Updates specific fields of a task (e.g. marking it as completed)."
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Task",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/tasks/{{task_id}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tasks", "{{task_id}}", ""]
+            },
+            "description": "Deletes a specific task."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Calendar Sync",
+      "item": [
+        {
+          "name": "Get Calendar Subscription URLs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.calendar_token) {",
+                  "    pm.collectionVariables.set(\"calendar_token\", jsonData.calendar_token);",
+                  "    console.log(\"[TasKode] Saved calendar_token: \" + jsonData.calendar_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calendar/token/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "calendar", "token", ""]
+            },
+            "description": "Returns the authenticated user's private iCal/Webcal subscription feed URLs."
+          },
+          "response": []
+        },
+        {
+          "name": "Regenerate Calendar Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "const jsonData = pm.response.json();",
+                  "if (jsonData.calendar_token) {",
+                  "    pm.collectionVariables.set(\"calendar_token\", jsonData.calendar_token);",
+                  "    console.log(\"[TasKode] Rotated calendar_token: \" + jsonData.calendar_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calendar/token/refresh/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "calendar", "token", "refresh", ""]
+            },
+            "description": "Invalidates old calendar feed links and generates a new secret calendar token."
+          },
+          "response": []
+        },
+        {
+          "name": "Fetch Public iCal Feed (.ics)",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/calendar/feed/{{calendar_token}}/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "calendar", "feed", "{{calendar_token}}", ""]
+            },
+            "description": "Public iCalendar (RFC 5545) subscription endpoint consumed by Google Calendar or Apple Calendar/Reminders. Uses URL token authentication (no Bearer header needed)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Users",
+      "item": [
+        {
+          "name": "List Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", ""]
+            },
+            "description": "Returns a list of all registered users."
+          },
+          "response": []
+        },
+        {
+          "name": "Retrieve User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/1/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "1", ""]
+            },
+            "description": "Returns details of a specific user."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "6. API Schema & Documentation",
+      "item": [
+        {
+          "name": "Get OpenAPI 3.0 Schema",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/schema/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "schema", ""]
+            },
+            "description": "Returns raw OpenAPI 3.0 schema YAML/JSON dynamically generated by drf-spectacular."
+          },
+          "response": []
+        },
+        {
+          "name": "Swagger UI Documentation",
+          "request": {
+            "auth": {
+              "type": "noauth"
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/docs/",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "docs", ""]
+            },
+            "description": "Interactive Swagger UI documentation page."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

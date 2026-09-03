@@ -258,7 +258,15 @@ def test_task_viewset_gen_with_indexed_project_rag(auth_client, test_user, sampl
         "subtasks": [{"title": "Subtask 1", "completed": False}],
     }
 
-    with patch("coresite.views.task_views.retrieve_relevant_code", return_value="def login(): pass") as mock_rag:
+    mock_chunk = {
+        "filepath": "auth.py",
+        "start_line": 1,
+        "end_line": 10,
+        "symbol_type": "function",
+        "distance": 0.15,
+        "code": "def login(): pass",
+    }
+    with patch("coresite.views.task_views.retrieve_relevant_code_with_metadata", return_value=("def login(): pass", [mock_chunk])) as mock_rag:
         with patch("coresite.views.task_views.utils.text_to_tasks", return_value=mock_task_obj) as mock_ai:
             resp = auth_client.post("/api/tasks/gen/", {
                 "text": "Add 2FA Login",
@@ -266,6 +274,11 @@ def test_task_viewset_gen_with_indexed_project_rag(auth_client, test_user, sampl
                 "project_id": sample_project.id,
             })
             assert resp.status_code == status.HTTP_201_CREATED
+            data = resp.json()
+            assert data["message"] == "Task created successfully"
+            assert len(data["retrieved_chunks"]) == 1
+            assert data["retrieved_chunks"][0]["filepath"] == "auth.py"
+            assert data["rag_model"] == "gemini-embedding-2"
             mock_rag.assert_called_once_with(sample_project.id, "Add 2FA Login", model="gemini-embedding-2", top_k=4)
             mock_ai.assert_called_once_with("Add 2FA Login", "UTC", sample_project.ast_outline, "def login(): pass")
 
