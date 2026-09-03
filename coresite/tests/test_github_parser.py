@@ -137,7 +137,7 @@ def test_fetch_file_content_fallback_to_master():
     master_response.read.return_value = b"def master_code(): pass"
     master_response.__enter__.return_value = master_response
 
-    def urlopen_side_effect(req):
+    def urlopen_side_effect(req, *args, **kwargs):
         if "/main/" in req.full_url:
             raise err_404
         return master_response
@@ -150,7 +150,7 @@ def test_fetch_file_content_fallback_to_master():
 def test_fetch_file_content_fallback_to_master_with_exception():
     err_404 = urllib.error.HTTPError("url", 404, "Not Found", {}, None)
 
-    def urlopen_side_effect(req):
+    def urlopen_side_effect(req, *args, **kwargs):
         if "/main/" in req.full_url:
             raise err_404
         raise Exception("Master branch read failed")

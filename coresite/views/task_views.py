@@ -20,7 +20,7 @@ from ..models import Project, Task, Weather
 from ..serializers import ProjectSerializer, TaskSerializer, UserSerializer
 from ..services import utils
 from ..services.github_parser import sync_project_ast
-from ..services.rag_service import retrieve_relevant_code
+from ..services.rag_service import retrieve_relevant_code, retrieve_relevant_code_with_metadata
 from ..tasks import index_project_codebase
 
 
@@ -92,7 +92,13 @@ class TaskViewSet(viewsets.ModelViewSet):
         responses={
             201: inline_serializer(
                 name="TaskGenResponse",
-                fields={"message": serializers.CharField()},
+                fields={
+                    "message": serializers.CharField(),
+                    "task": TaskSerializer(),
+                    "retrieved_chunks": serializers.ListField(child=serializers.DictField(), required=False),
+                    "rag_model": serializers.CharField(allow_null=True, required=False),
+                    "ast_outline_used": serializers.BooleanField(required=False),
+                },
             ),
             400: OpenApiResponse(description="No text provided"),
             404: OpenApiResponse(description="Project not found or access denied"),
@@ -109,6 +115,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         project = None
         ast_outline = None
         code_snippets = None
+        retrieved_chunks = []
 
         if project_id:
             try:
@@ -117,13 +124,13 @@ class TaskViewSet(viewsets.ModelViewSet):
                 if project.is_indexed:
                     print(f"\n[RAG Generation] ⚡ Project '{project.name}' is indexed ({project.embedding_model}). Retrieving code...")
                     try:
-                        code_snippets = retrieve_relevant_code(
+                        code_snippets, retrieved_chunks = retrieve_relevant_code_with_metadata(
                             project.id,
                             text,
-                            model=project.embedding_model or "gemini-embedding-2",
+                            model=project.embedding_model or "gemini-embedding-001",
                             top_k=4,
                         )
-                        snippet_count = code_snippets.count("--- Code Snippet") if code_snippets else 0
+                        snippet_count = len(retrieved_chunks)
                         print(f"[RAG Generation] 📥 Injected {snippet_count} code snippet(s) into Gemini prompt context.")
                     except Exception as e:
                         print(f"[RAG Generation] ⚠️ Code retrieval failed: {e}")
@@ -138,9 +145,15 @@ class TaskViewSet(viewsets.ModelViewSet):
             task = utils.text_to_tasks(text, "UTC", ast_outline, code_snippets)
 
         task_data = task.model_dump()
-        Task.objects.create(owner=request.user, project=project, **task_data)
+        created_task = Task.objects.create(owner=request.user, project=project, **task_data)
 
-        return Response({"message": "Task created successfully"}, status=status.HTTP_201_CREATED)
+        return Response({
+            "message": "Task created successfully",
+            "task": TaskSerializer(created_task).data,
+            "retrieved_chunks": retrieved_chunks,
+            "rag_model": project.embedding_model if (project and project.is_indexed) else None,
+            "ast_outline_used": bool(ast_outline),
+        }, status=status.HTTP_201_CREATED)
 
 
 @extend_schema_view(

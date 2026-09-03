@@ -441,6 +441,7 @@
                         <option value="all">All Tasks</option>
                         <option value="none">Unassigned</option>
                     </select>
+                    <span id="project-rag-pill" style="display: none; font-size: 0.78em; padding: 4px 10px; border-radius: var(--radius-sm); font-weight: 600; align-items: center; gap: 6px;"></span>
                     
                     <button id="view-ast-btn" class="btn-secondary" style="display: none;">View AST</button>
                     <button id="sync-repo-btn" class="btn-secondary" style="display: none;">Sync Repo</button>
@@ -472,9 +473,22 @@
                             <div id="ai-rag-indicator" style="display: none; font-size: 0.8em; padding: 6px 10px; border-radius: var(--radius-sm); margin-top: 6px; align-items: center; gap: 6px; line-height: 1.4;"></div>
                         </div>
                         <textarea id="ai-task-text" rows="5" placeholder="E.g., Add input validation to the signup form and write unit tests for the auth module." required style="resize: vertical;"></textarea>
-                        <button type="submit" class="btn-primary">Generate Tasks</button>
+                        <button type="submit" id="ai-task-submit-btn" class="btn-primary">Generate Tasks</button>
                     </form>
-                    <p id="ai-task-status" style="margin-top: 12px; font-size: 0.9em; color: var(--text-secondary);"></p>
+                    <p id="ai-task-status" style="margin-top: 12px; font-size: 0.9em; line-height: 1.4;"></p>
+
+                    <!-- Injected RAG Context Inspector -->
+                    <div id="ai-rag-retrieval-container" style="display: none; margin-top: 12px; background: #0d1117; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px; font-size: 0.85em;">
+                        <div id="ai-rag-retrieval-header" style="display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none;">
+                            <span style="font-weight: 600; color: #38ef7d; display: flex; align-items: center; gap: 6px;">
+                                <span>🔍</span> <span id="ai-rag-retrieval-title">Injected RAG Context (0 snippets)</span>
+                            </span>
+                            <span id="ai-rag-retrieval-toggle-icon" style="color: var(--text-secondary); font-size: 0.8em; transition: transform 0.2s;">▼</span>
+                        </div>
+                        <div id="ai-rag-retrieval-body" style="margin-top: 10px; display: flex; flex-direction: column; gap: 10px; max-height: 340px; overflow-y: auto;">
+                            <!-- Code snippet cards will be rendered dynamically here -->
+                        </div>
+                    </div>
                 </div>
                 
                 <h3 style="margin-top: 20px;">Create Task</h3>
@@ -579,18 +593,28 @@
 
     <!-- RAG Live Activity Side Panel Drawer -->
     <div id="rag-drawer-backdrop" style="display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1090; backdrop-filter: blur(2px); transition: opacity 0.3s ease;"></div>
-    <aside id="rag-activity-drawer" style="position: fixed; top: 0; right: 0; bottom: 0; width: 440px; max-width: 90vw; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -4px 0 24px rgba(0,0,0,0.3); z-index: 1100; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
+    <aside id="rag-activity-drawer" style="position: fixed; top: 0; right: 0; bottom: 0; width: 450px; max-width: 90vw; background: var(--surface); border-left: 1px solid var(--border); box-shadow: -4px 0 24px rgba(0,0,0,0.3); z-index: 1100; display: flex; flex-direction: column; transform: translateX(100%); transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);">
         <div style="padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; background: var(--surface-hover);">
             <div>
                 <h3 style="margin: 0; font-size: 1.1em; display: flex; align-items: center; gap: 8px;">
                     <span>⚡</span> RAG Indexing Activity
                 </h3>
-                <small id="drawer-project-name" style="color: var(--text-secondary); font-size: 0.85em;">Select a project</small>
+                <div style="display: flex; align-items: center; gap: 8px; margin-top: 4px;">
+                    <small id="drawer-project-name" style="color: var(--text-secondary); font-size: 0.85em; font-weight: 500;">Select a project</small>
+                    <span id="drawer-status-pill" style="font-size: 0.72em; padding: 2px 8px; border-radius: 999px; font-weight: 600; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);">Idle</span>
+                </div>
             </div>
             <button id="close-rag-drawer-btn" style="background: none; border: none; font-size: 1.4em; color: var(--text-secondary); cursor: pointer; line-height: 1;">&times;</button>
         </div>
 
         <div style="padding: 20px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;">
+            <!-- Completion Celebration Card (Shown when completed) -->
+            <div id="drawer-completion-banner" style="display: none; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: var(--radius-sm); padding: 14px; color: #34d399; font-size: 0.88em; text-align: center;">
+                <div style="font-size: 1.1em; font-weight: 600; margin-bottom: 4px;">🎉 Codebase Successfully Indexed!</div>
+                <div style="color: var(--text-primary); font-size: 0.85em;">Vector embeddings are stored in ChromaDB. RAG search is ready.</div>
+                <div id="drawer-auto-close-timer" style="margin-top: 8px; font-size: 0.8em; color: #a7f3d0; font-weight: 500;">Auto-closing in 3s...</div>
+            </div>
+
             <!-- Progress Bar Section -->
             <div>
                 <div style="display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 0.85em;">
@@ -622,14 +646,19 @@
             </div>
 
             <!-- Live Terminal Console -->
-            <div style="flex: 1; display: flex; flex-direction: column; min-height: 240px;">
+            <div style="flex: 1; display: flex; flex-direction: column; min-height: 220px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span style="font-size: 0.8em; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Live Execution Logs</span>
                     <span id="drawer-model-badge" style="font-size: 0.75em; padding: 2px 8px; border-radius: 999px; background: rgba(59, 130, 246, 0.15); color: #3b82f6;">gemini-embedding-001</span>
                 </div>
-                <div id="drawer-console-logs" style="flex: 1; max-height: 280px; background: #0d1117; color: #38ef7d; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78em; padding: 12px; border-radius: var(--radius-sm); overflow-y: auto; line-height: 1.5; border: 1px solid rgba(255,255,255,0.1); white-space: pre-wrap; word-break: break-word;">
+                <div id="drawer-console-logs" style="flex: 1; max-height: 260px; background: #0d1117; color: #38ef7d; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78em; padding: 12px; border-radius: var(--radius-sm); overflow-y: auto; line-height: 1.5; border: 1px solid rgba(255,255,255,0.1); white-space: pre-wrap; word-break: break-word;">
                     <div style="color: #8b949e;">[RAG Status] Ready. Trigger project sync or creation to stream live execution logs.</div>
                 </div>
+            </div>
+
+            <!-- Drawer Footer Actions -->
+            <div style="display: flex; gap: 10px; border-top: 1px solid var(--border); padding-top: 12px;">
+                <button type="button" id="drawer-dismiss-btn" class="btn-secondary" style="flex: 1; padding: 8px 14px; font-size: 0.85em;">Dismiss / Close</button>
             </div>
         </div>
     </aside>
@@ -708,6 +737,10 @@
         const openRagDrawerBtn = document.getElementById('open-rag-drawer-btn');
         const closeRagDrawerBtn = document.getElementById('close-rag-drawer-btn');
         const drawerProjectName = document.getElementById('drawer-project-name');
+        const drawerStatusPill = document.getElementById('drawer-status-pill');
+        const drawerCompletionBanner = document.getElementById('drawer-completion-banner');
+        const drawerAutoCloseTimer = document.getElementById('drawer-auto-close-timer');
+        const drawerDismissBtn = document.getElementById('drawer-dismiss-btn');
         const drawerStepLabel = document.getElementById('drawer-step-label');
         const drawerProgressPct = document.getElementById('drawer-progress-pct');
         const drawerProgressBar = document.getElementById('drawer-progress-bar');
@@ -718,15 +751,28 @@
         const stageItemGuardrails = document.getElementById('stage-item-guardrails');
         const stageItemEmbedding = document.getElementById('stage-item-embedding');
         const stageItemChroma = document.getElementById('stage-item-chroma');
+        const projectRagPill = document.getElementById('project-rag-pill');
         let ragPollingInterval = null;
+        let drawerAutoCloseInterval = null;
 
         function openRagDrawer(projectName = '') {
+            if (drawerAutoCloseInterval) {
+                clearInterval(drawerAutoCloseInterval);
+                drawerAutoCloseInterval = null;
+            }
+            if (drawerCompletionBanner) drawerCompletionBanner.style.display = 'none';
+            if (drawerProgressBar) drawerProgressBar.style.background = 'linear-gradient(90deg, #3b82f6, #10b981)';
+            if (drawerProgressPct) drawerProgressPct.style.color = '#3b82f6';
             if (ragDrawer) ragDrawer.style.transform = 'translateX(0)';
             if (ragDrawerBackdrop) ragDrawerBackdrop.style.display = 'block';
             if (projectName && drawerProjectName) drawerProjectName.textContent = projectName;
         }
 
         function closeRagDrawer() {
+            if (drawerAutoCloseInterval) {
+                clearInterval(drawerAutoCloseInterval);
+                drawerAutoCloseInterval = null;
+            }
             if (ragDrawer) ragDrawer.style.transform = 'translateX(100%)';
             if (ragDrawerBackdrop) ragDrawerBackdrop.style.display = 'none';
         }
@@ -744,6 +790,7 @@
         }
 
         if (closeRagDrawerBtn) closeRagDrawerBtn.addEventListener('click', closeRagDrawer);
+        if (drawerDismissBtn) drawerDismissBtn.addEventListener('click', closeRagDrawer);
         if (ragDrawerBackdrop) ragDrawerBackdrop.addEventListener('click', closeRagDrawer);
 
         function updateStageIcons(stage, progress) {
@@ -755,20 +802,35 @@
                 { el: stageItemChroma, threshold: 100 },
             ];
 
+            const isCompleted = (stage === 'completed' || progress >= 100);
+
             stages.forEach(({ el, threshold }) => {
                 if (!el) return;
                 const icon = el.querySelector('.stage-icon');
-                if (progress >= threshold) {
+                if (isCompleted || progress >= threshold) {
                     if (icon) icon.textContent = '✅';
-                    el.style.color = 'var(--text-primary)';
+                    el.style.color = '#34d399';
+                    el.style.fontWeight = '500';
                 } else if (progress >= threshold - 15) {
                     if (icon) icon.textContent = '⏳';
                     el.style.color = '#3b82f6';
+                    el.style.fontWeight = '600';
                 } else {
                     if (icon) icon.textContent = '⚪';
                     el.style.color = 'var(--text-secondary)';
+                    el.style.fontWeight = 'normal';
                 }
             });
+        }
+
+        function escapeHtml(unsafe) {
+            if (!unsafe) return '';
+            return String(unsafe)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
         function renderDrawerLogs(logs) {
@@ -778,7 +840,8 @@
                 if (l.includes('⚠️') || l.includes('Warning')) color = '#f59e0b'; // amber
                 if (l.includes('❌') || l.includes('failed') || l.includes('Error')) color = '#ef4444'; // red
                 if (l.includes('🚀') || l.includes('🧠') || l.includes('⚡') || l.includes('📁')) color = '#60a5fa'; // blue
-                return `<div style="color: ${color}; margin-bottom: 2px;">${escapeHtml(l)}</div>`;
+                if (l.includes('↳') || l.includes('Parsed') || l.includes('Processed')) color = '#a7f3d0'; // light emerald
+                return `<div style="color: ${color}; margin-bottom: 3px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;">${escapeHtml(l)}</div>`;
             }).join('');
             drawerConsoleLogs.scrollTop = drawerConsoleLogs.scrollHeight;
         }
@@ -794,6 +857,24 @@
                 if (drawerProgressBar) drawerProgressBar.style.width = `${data.progress}%`;
                 if (drawerStepLabel) drawerStepLabel.textContent = data.current_step || data.stage;
                 if (drawerModelBadge && data.model) drawerModelBadge.textContent = data.model;
+
+                if (data.status === 'completed' || data.is_indexed) {
+                    if (drawerStatusPill) {
+                        drawerStatusPill.textContent = '✅ Ready';
+                        drawerStatusPill.style.background = 'rgba(16, 185, 129, 0.15)';
+                        drawerStatusPill.style.color = '#34d399';
+                        drawerStatusPill.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                    }
+                    if (drawerProgressPct) {
+                        drawerProgressPct.textContent = '100%';
+                        drawerProgressPct.style.color = '#10b981';
+                    }
+                    if (drawerProgressBar) {
+                        drawerProgressBar.style.width = '100%';
+                        drawerProgressBar.style.background = '#10b981';
+                    }
+                    updateStageIcons('completed', 100);
+                }
                 updateStageIcons(data.stage, data.progress);
                 renderDrawerLogs(data.logs);
             } catch (err) {
@@ -803,7 +884,18 @@
 
         function startRagStatusPolling(projectId, projectName, onDone = null) {
             if (ragPollingInterval) clearInterval(ragPollingInterval);
+            if (drawerAutoCloseInterval) {
+                clearInterval(drawerAutoCloseInterval);
+                drawerAutoCloseInterval = null;
+            }
             openRagDrawer(projectName);
+
+            if (drawerStatusPill) {
+                drawerStatusPill.textContent = '⏳ Indexing...';
+                drawerStatusPill.style.background = 'rgba(245, 158, 11, 0.15)';
+                drawerStatusPill.style.color = '#fbbf24';
+                drawerStatusPill.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+            }
 
             const poll = async () => {
                 try {
@@ -824,16 +916,54 @@
                     if (data.status === 'completed' || data.is_indexed) {
                         clearInterval(ragPollingInterval);
                         ragPollingInterval = null;
-                        if (drawerProgressPct) drawerProgressPct.textContent = '100%';
-                        if (drawerProgressBar) drawerProgressBar.style.width = '100%';
-                        if (drawerStepLabel) drawerStepLabel.textContent = '✅ Codebase indexing complete!';
+
+                        if (drawerProgressPct) {
+                            drawerProgressPct.textContent = '100%';
+                            drawerProgressPct.style.color = '#10b981';
+                        }
+                        if (drawerProgressBar) {
+                            drawerProgressBar.style.width = '100%';
+                            drawerProgressBar.style.background = '#10b981';
+                        }
+                        if (drawerStepLabel) drawerStepLabel.textContent = '✅ Codebase indexing complete & ready!';
+                        if (drawerStatusPill) {
+                            drawerStatusPill.textContent = '✅ Ready';
+                            drawerStatusPill.style.background = 'rgba(16, 185, 129, 0.15)';
+                            drawerStatusPill.style.color = '#34d399';
+                            drawerStatusPill.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                        }
                         updateStageIcons('completed', 100);
+                        if (drawerCompletionBanner) drawerCompletionBanner.style.display = 'block';
+
+                        // Immediately update projects cache and UI selectors
+                        await fetchProjects();
+
                         if (onDone) onDone(data);
+
+                        // Auto-close after 3 seconds with visible countdown
+                        let countdown = 3;
+                        if (drawerAutoCloseTimer) drawerAutoCloseTimer.textContent = `Auto-closing in ${countdown}s...`;
+                        drawerAutoCloseInterval = setInterval(() => {
+                            countdown--;
+                            if (countdown <= 0) {
+                                clearInterval(drawerAutoCloseInterval);
+                                drawerAutoCloseInterval = null;
+                                closeRagDrawer();
+                            } else {
+                                if (drawerAutoCloseTimer) drawerAutoCloseTimer.textContent = `Auto-closing in ${countdown}s...`;
+                            }
+                        }, 1000);
                     } else if (data.status === 'failed') {
                         clearInterval(ragPollingInterval);
                         ragPollingInterval = null;
                         if (drawerStepLabel) drawerStepLabel.textContent = `❌ ${data.current_step}`;
                         if (drawerProgressPct) drawerProgressPct.style.color = '#ef4444';
+                        if (drawerStatusPill) {
+                            drawerStatusPill.textContent = '❌ Failed';
+                            drawerStatusPill.style.background = 'rgba(239, 68, 68, 0.15)';
+                            drawerStatusPill.style.color = '#f87171';
+                            drawerStatusPill.style.border = '1px solid rgba(239, 68, 68, 0.3)';
+                        }
                         if (onDone) onDone(data);
                     }
                 } catch (err) {
@@ -1145,14 +1275,17 @@
                 }
 
                 projects.forEach(project => {
+                    const badge = project.is_indexed ? '⚡ ' : (project.github_repo ? '⏳ ' : '');
+                    const suffix = project.is_indexed ? ' [RAG Ready]' : (project.github_repo ? ' [Pending Index]' : '');
+
                     const opt = document.createElement('option');
                     opt.value = project.id;
-                    opt.textContent = project.name;
+                    opt.textContent = `${badge}${project.name}${suffix}`;
                     projectSelect.appendChild(opt);
 
                     const aiOpt = document.createElement('option');
                     aiOpt.value = project.id;
-                    aiOpt.textContent = project.name;
+                    aiOpt.textContent = `${badge}${project.name}${suffix}`;
                     aiProjectSelect.appendChild(aiOpt);
                 });
 
@@ -1176,27 +1309,27 @@
         function updateAiRagIndicator() {
             const selectedId = aiProjectSelect.value;
             const project = allProjects.find(p => String(p.id) === selectedId);
-            if (!project || selectedId === 'none') {
+            if (!project || selectedId === 'none' || selectedId === 'all') {
                 aiRagIndicator.style.display = 'none';
                 return;
             }
 
             aiRagIndicator.style.display = 'flex';
             if (project.is_indexed) {
-                aiRagIndicator.style.background = 'rgba(40, 167, 69, 0.12)';
-                aiRagIndicator.style.color = '#28a745';
-                aiRagIndicator.style.border = '1px solid rgba(40, 167, 69, 0.25)';
-                aiRagIndicator.innerHTML = `⚡ <strong>RAG Active:</strong> Codebase vector search ready (${project.embedding_model || 'gemini-embedding-001'})`;
+                aiRagIndicator.style.background = 'rgba(16, 185, 129, 0.12)';
+                aiRagIndicator.style.color = '#34d399';
+                aiRagIndicator.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                aiRagIndicator.innerHTML = `⚡ <strong>RAG Active:</strong> Codebase vector search ready (${project.embedding_model || 'gemini-embedding-001'}) • Collection: ${project.collection_name || 'project_' + project.id}`;
             } else if (project.github_repo) {
-                aiRagIndicator.style.background = 'rgba(255, 193, 7, 0.12)';
-                aiRagIndicator.style.color = '#ffc107';
-                aiRagIndicator.style.border = '1px solid rgba(255, 193, 7, 0.25)';
-                aiRagIndicator.innerHTML = `⏳ <strong>Indexing in progress:</strong> Embedding codebase in background (using AST outline for now)`;
+                aiRagIndicator.style.background = 'rgba(245, 158, 11, 0.12)';
+                aiRagIndicator.style.color = '#fbbf24';
+                aiRagIndicator.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+                aiRagIndicator.innerHTML = `⏳ <strong>Vector Index Pending:</strong> Click "Sync Repo" on this project to generate ChromaDB embeddings`;
             } else {
-                aiRagIndicator.style.background = 'rgba(108, 117, 125, 0.12)';
+                aiRagIndicator.style.background = 'rgba(100, 116, 139, 0.12)';
                 aiRagIndicator.style.color = 'var(--text-secondary)';
-                aiRagIndicator.style.border = '1px solid rgba(108, 117, 125, 0.25)';
-                aiRagIndicator.innerHTML = `📂 <strong>Standard outline:</strong> No GitHub repository linked`;
+                aiRagIndicator.style.border = '1px solid rgba(100, 116, 139, 0.25)';
+                aiRagIndicator.innerHTML = `📂 <strong>Standard Outline:</strong> No GitHub repository linked`;
             }
         }
 
@@ -1204,16 +1337,34 @@
             const selectedId = projectSelect.value;
             const project = allProjects.find(p => String(p.id) === selectedId);
             
+            if (projectRagPill) {
+                if (project && project.is_indexed) {
+                    projectRagPill.style.display = 'inline-flex';
+                    projectRagPill.style.background = 'rgba(16, 185, 129, 0.15)';
+                    projectRagPill.style.color = '#34d399';
+                    projectRagPill.style.border = '1px solid rgba(16, 185, 129, 0.3)';
+                    projectRagPill.innerHTML = `⚡ RAG Active (${project.embedding_model || 'gemini-embedding-001'})`;
+                } else if (project && project.github_repo) {
+                    projectRagPill.style.display = 'inline-flex';
+                    projectRagPill.style.background = 'rgba(245, 158, 11, 0.15)';
+                    projectRagPill.style.color = '#fbbf24';
+                    projectRagPill.style.border = '1px solid rgba(245, 158, 11, 0.3)';
+                    projectRagPill.innerHTML = `⏳ Pending Index (Click 'Sync Repo')`;
+                } else {
+                    projectRagPill.style.display = 'none';
+                }
+            }
+
             if (project && project.ast_outline) {
                 viewAstBtn.style.display = 'inline-block';
                 viewAstBtn.onclick = () => {
                     astContent.textContent = project.ast_outline;
                     if (project.is_indexed) {
-                        astRagStatus.innerHTML = `<span style="color: #28a745;">🟢 ChromaDB Vector Index: Active</span>`;
+                        astRagStatus.innerHTML = `<span style="color: #34d399;">🟢 ChromaDB Vector Index: Active</span>`;
                         const lastIndexed = project.last_indexed_at ? new Date(project.last_indexed_at).toLocaleString() : 'Recently';
                         astRagDetails.textContent = `Model: ${project.embedding_model || 'gemini-embedding-001'} • Collection: ${project.collection_name || 'project_' + project.id} • Last Indexed: ${lastIndexed}`;
                     } else {
-                        astRagStatus.innerHTML = `<span style="color: #ffc107;">⏳ Vector Index: Pending / Not Indexed</span>`;
+                        astRagStatus.innerHTML = `<span style="color: #fbbf24;">⏳ Vector Index: Pending / Not Indexed</span>`;
                         astRagDetails.textContent = `Click "Sync Repo" to trigger background Celery indexing into ChromaDB.`;
                     }
                     astModal.showModal();
@@ -1805,17 +1956,53 @@
         const aiFormEl = document.getElementById('ai-task-form');
         const aiTextEl = document.getElementById('ai-task-text');
         const aiStatusEl = document.getElementById('ai-task-status');
+        const aiSubmitBtn = document.getElementById('ai-task-submit-btn');
+        const aiRagRetrievalContainer = document.getElementById('ai-rag-retrieval-container');
+        const aiRagRetrievalHeader = document.getElementById('ai-rag-retrieval-header');
+        const aiRagRetrievalTitle = document.getElementById('ai-rag-retrieval-title');
+        const aiRagRetrievalToggleIcon = document.getElementById('ai-rag-retrieval-toggle-icon');
+        const aiRagRetrievalBody = document.getElementById('ai-rag-retrieval-body');
+
+        if (aiRagRetrievalHeader) {
+            aiRagRetrievalHeader.addEventListener('click', () => {
+                const isHidden = aiRagRetrievalBody.style.display === 'none';
+                aiRagRetrievalBody.style.display = isHidden ? 'flex' : 'none';
+                if (aiRagRetrievalToggleIcon) {
+                    aiRagRetrievalToggleIcon.textContent = isHidden ? '▼' : '▶';
+                }
+            });
+        }
 
         aiFormEl.addEventListener('submit', async (e) => {
             e.preventDefault();
             const text = aiTextEl.value.trim();
             if (!text) return;
 
-            aiStatusEl.textContent = 'Generating tasks...';
-            aiStatusEl.style.color = '#333';
+            if (aiSubmitBtn) {
+                aiSubmitBtn.disabled = true;
+                aiSubmitBtn.textContent = '⏳ Processing...';
+            }
 
             // Use the AI panel's own project selector
             const aiProject = aiProjectSelect.value;
+            const targetProjObj = allProjects.find(p => String(p.id) === aiProject);
+            const isIndexed = targetProjObj && targetProjObj.is_indexed;
+
+            aiStatusEl.style.display = 'block';
+            if (isIndexed) {
+                aiStatusEl.innerHTML = '<span style="color: #60a5fa;">🔍 1/2: Searching ChromaDB for relevant codebase chunks...</span>';
+            } else if (targetProjObj && targetProjObj.ast_outline) {
+                aiStatusEl.innerHTML = '<span style="color: #60a5fa;">🧠 1/2: Preparing AST symbol outline context...</span>';
+            } else {
+                aiStatusEl.innerHTML = '<span style="color: #60a5fa;">🧠 1/2: Contacting Gemini AI model...</span>';
+            }
+
+            const step2Timer = setTimeout(() => {
+                if (aiStatusEl.innerHTML.includes('1/2')) {
+                    aiStatusEl.innerHTML = '<span style="color: #c084fc;">⚡ 2/2: Gemini synthesising ticket with codebase context...</span>';
+                }
+            }, 900);
+
             const payload = {
                 text: text,
                 timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -1830,24 +2017,60 @@
                     headers: getAuthHeaders(),
                     body: JSON.stringify(payload)
                 });
+                clearTimeout(step2Timer);
 
                 if (response.ok) {
+                    const data = await response.json();
                     aiTextEl.value = '';
-                    aiStatusEl.textContent = 'Tasks created successfully!';
-                    aiStatusEl.style.color = '#28a745';
+                    
+                    // Render retrieved RAG chunks if available
+                    if (data.retrieved_chunks && data.retrieved_chunks.length > 0) {
+                        aiRagRetrievalTitle.textContent = `Injected RAG Context (${data.retrieved_chunks.length} Snippets • ${data.rag_model || 'gemini-embedding-001'})`;
+                        aiRagRetrievalBody.innerHTML = data.retrieved_chunks.map(chunk => `
+                            <div style="background: #161b22; border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; padding: 8px 10px;">
+                                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                                    <span style="font-weight: 600; color: #58a6ff; font-family: monospace; font-size: 0.85em;">📄 ${escapeHtml(chunk.filepath)}${chunk.start_line ? ` (L${chunk.start_line}-${chunk.end_line})` : ''}</span>
+                                    <span style="font-size: 0.72em; color: var(--text-muted); padding: 1px 6px; border-radius: 4px; background: rgba(255,255,255,0.05);">${escapeHtml(chunk.symbol_type || 'code')}${chunk.distance != null ? ` • dist: ${chunk.distance}` : ''}</span>
+                                </div>
+                                <pre style="margin: 0; background: #0d1117; padding: 8px; border-radius: 4px; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 0.78em; color: #c9d1d9; overflow-x: auto; white-space: pre-wrap; word-break: break-word; max-height: 140px;"><code>${escapeHtml(chunk.code)}</code></pre>
+                            </div>
+                        `).join('');
+                        aiRagRetrievalContainer.style.display = 'block';
+                        aiRagRetrievalBody.style.display = 'flex';
+                        if (aiRagRetrievalToggleIcon) aiRagRetrievalToggleIcon.textContent = '▼';
+
+                        aiStatusEl.innerHTML = `<span style="color: #34d399;">✅ Task created with ${data.retrieved_chunks.length} RAG code snippets!</span>`;
+                    } else if (data.ast_outline_used) {
+                        aiRagRetrievalContainer.style.display = 'none';
+                        aiStatusEl.innerHTML = '<span style="color: #34d399;">✅ Task created using AST symbol outline context!</span>';
+                    } else {
+                        aiRagRetrievalContainer.style.display = 'none';
+                        aiStatusEl.innerHTML = '<span style="color: #34d399;">✅ Task created successfully!</span>';
+                    }
+
                     fetchTasks();
-                    setTimeout(() => aiStatusEl.textContent = '', 3000);
+                    setTimeout(() => {
+                        if (aiStatusEl.innerHTML.includes('Task created')) {
+                            aiStatusEl.textContent = '';
+                        }
+                    }, 4000);
                 } else if (response.status === 401) {
                     logoutBtn.click();
                 } else {
                     const data = await response.json();
-                    aiStatusEl.textContent = data.message || 'Failed to generate tasks.';
+                    aiStatusEl.textContent = data.message || data.error || 'Failed to generate tasks.';
                     aiStatusEl.style.color = '#dc3545';
                 }
             } catch (error) {
+                clearTimeout(step2Timer);
                 console.error("Error generating tasks:", error);
                 aiStatusEl.textContent = 'An error occurred.';
                 aiStatusEl.style.color = '#dc3545';
+            } finally {
+                if (aiSubmitBtn) {
+                    aiSubmitBtn.disabled = false;
+                    aiSubmitBtn.textContent = 'Generate Tasks';
+                }
             }
         });
 

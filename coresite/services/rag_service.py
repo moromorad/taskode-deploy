@@ -275,9 +275,14 @@ def index_project_chunks(
 # 3. Code Retrieval
 # ==========================================
 
-def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMARY_MODEL, top_k: int = 4) -> str:
+def retrieve_relevant_code_with_metadata(
+    project_id: int, query_text: str, model: str = PRIMARY_MODEL, top_k: int = 4
+) -> tuple[str, list[dict]]:
     """
     Performs cosine similarity search in ChromaDB using the project's embedding model.
+    Returns a tuple of:
+    - concatenated prompt context string
+    - list of structured chunk dicts containing filepath, lines, code, symbol_type, and distance.
     """
     chroma = get_chroma_client()
     collection_name = f"project_{project_id}"
@@ -286,7 +291,7 @@ def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMAR
         collection = chroma.get_collection(name=collection_name)
     except Exception:
         print(f"[RAG Retrieval] ⚠️ Collection '{collection_name}' not found in ChromaDB.")
-        return ""
+        return "", []
 
     query_vector = embed_code_query(query_text, model=model)
 
@@ -297,19 +302,38 @@ def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMAR
 
     if not results or not results.get("documents") or not results["documents"][0]:
         print(f"[RAG Retrieval] ⚠️ No matching code snippets found in '{collection_name}'.")
-        return ""
+        return "", []
 
     snippets = []
-    for doc, metadata in zip(results["documents"][0], results["metadatas"][0]):
+    chunk_list = []
+    distances = results.get("distances", [[]])[0] if results.get("distances") else []
+
+    for idx, (doc, metadata) in enumerate(zip(results["documents"][0], results["metadatas"][0])):
         filepath = metadata.get("filepath", "unknown")
         start_line = metadata.get("start_line", "")
         end_line = metadata.get("end_line", "")
+        symbol_type = metadata.get("symbol_type", "code")
+        distance = distances[idx] if idx < len(distances) else None
         line_info = f" (Lines {start_line}-{end_line})" if start_line and end_line else ""
 
         snippets.append(
             f"--- Code Snippet from {filepath}{line_info} ---\n"
             f"{doc}\n"
         )
+        chunk_list.append({
+            "filepath": filepath,
+            "start_line": start_line,
+            "end_line": end_line,
+            "symbol_type": symbol_type,
+            "distance": round(distance, 4) if distance is not None else None,
+            "code": doc,
+        })
 
     print(f"[RAG Retrieval] 🎯 Retrieved {len(snippets)} relevant code snippets from ChromaDB.")
-    return "\n\n".join(snippets)
+    return "\n\n".join(snippets), chunk_list
+
+
+def retrieve_relevant_code(project_id: int, query_text: str, model: str = PRIMARY_MODEL, top_k: int = 4) -> str:
+    """Convenience wrapper returning concatenated prompt context string."""
+    formatted_text, _ = retrieve_relevant_code_with_metadata(project_id, query_text, model=model, top_k=top_k)
+    return formatted_text

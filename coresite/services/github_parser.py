@@ -11,7 +11,6 @@ import tree_sitter_typescript
 import tree_sitter_java
 
 def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
-   
     # Use recursive=1 to get all files in all nested folders in one single API call
     url = f"https://api.github.com/repos/{github_repo}/git/trees/main?recursive=1"
     req = urllib.request.Request(url, headers={"User-Agent": "TasKode-App"})
@@ -20,13 +19,19 @@ def fetch_repo_tree(github_repo: str, github_token: str = None) -> list:
         req.add_header('Authorization', f'Bearer {github_token}')
 
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             tree_data = json.loads(response.read().decode())
     except urllib.error.HTTPError as e:
-        print(f"Failed to fetch repo tree: HTTP {e.code} for {github_repo}")
+        if e.code in (403, 429):
+            print(f"[GitHub API] ⚠️ Rate limit exceeded (HTTP {e.code}) fetching tree for {github_repo}. Consider adding a Personal Access Token.")
+        else:
+            print(f"[GitHub API] ❌ Failed to fetch repo tree: HTTP {e.code} for {github_repo}")
+        return []
+    except (urllib.error.URLError, TimeoutError) as e:
+        print(f"[GitHub API] ⏱️ Timeout connecting to GitHub tree for {github_repo}: {e}")
         return []
     except Exception as e:
-        print(f"An error occurred: {e}")
+        print(f"[GitHub API] ❌ Error fetching repo tree: {e}")
         return []
 
     # Only keep production code files (blobs) that end with our target extensions
@@ -63,7 +68,7 @@ def fetch_file_content(github_repo: str, filepath: str, github_token: str = None
         req.add_header('Authorization', f'Bearer {github_token}')
         
     try:
-        with urllib.request.urlopen(req) as response:
+        with urllib.request.urlopen(req, timeout=10) as response:
             return response.read().decode('utf-8')
     except urllib.error.HTTPError as e:
         # Fallback: Many older repositories still use 'master' instead of 'main'
@@ -73,15 +78,20 @@ def fetch_file_content(github_repo: str, filepath: str, github_token: str = None
             if github_token:
                 req_master.add_header('Authorization', f'Bearer {github_token}')
             try:
-                with urllib.request.urlopen(req_master) as response:
+                with urllib.request.urlopen(req_master, timeout=10) as response:
                     return response.read().decode('utf-8')
             except Exception:
                 pass
-        
-        print(f"Failed to fetch {filepath}: HTTP {e.code}")
+        elif e.code in (403, 429):
+            print(f"[GitHub API] ⚠️ Rate limit exceeded (HTTP {e.code}) reading {filepath}.")
+        else:
+            print(f"[GitHub API] ❌ Failed to fetch {filepath}: HTTP {e.code}")
+        return ""
+    except (urllib.error.URLError, TimeoutError) as e:
+        print(f"[GitHub API] ⏱️ Timeout reading {filepath}: {e}")
         return ""
     except Exception as e:
-        print(f"Error reading {filepath}: {e}")
+        print(f"[GitHub API] ❌ Error reading {filepath}: {e}")
         return ""
 
 

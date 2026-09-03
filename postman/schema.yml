@@ -1,0 +1,1190 @@
+openapi: 3.0.3
+info:
+  title: TasKode API
+  version: 1.0.0
+  description: AI-Powered Task & Repository Intelligence Platform API documentation
+paths:
+  /api/2fa/resend/:
+    post:
+      operationId: 2fa_resend_create
+      description: Generates a new 6-digit OTP code and emails it to the user using
+        the existing session token.
+      summary: Resend 2FA OTP Code
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Resend2FA'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Resend2FA'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Resend2FA'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resend2FAResponse'
+          description: ''
+        '400':
+          description: Invalid or expired session
+        '500':
+          description: Failed to send verification email
+  /api/2fa/verify/:
+    post:
+      operationId: 2fa_verify_create
+      description: Verifies the 6-digit OTP against the session token and issues JWT
+        access and refresh tokens.
+      summary: 'Verify 2FA OTP (Step 2: Verification)'
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Verify2FA'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Verify2FA'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Verify2FA'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Verify2FAResponse'
+          description: ''
+        '400':
+          description: Invalid OTP code or expired session
+  /api/calendar/token/:
+    get:
+      operationId: calendar_token_retrieve
+      description: Returns the authenticated user's private iCal/Webcal feed subscription
+        URLs for Google Calendar and Apple Reminders/Calendar.
+      summary: Get Calendar Subscription URLs
+      tags:
+      - Calendar Sync
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CalendarTokenResponse'
+          description: ''
+  /api/calendar/token/refresh/:
+    post:
+      operationId: calendar_token_refresh_create
+      description: Revokes the existing calendar subscription URL and issues a new
+        one.
+      summary: Regenerate Calendar Token
+      tags:
+      - Calendar Sync
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefreshCalendarTokenResponse'
+          description: ''
+  /api/login/:
+    post:
+      operationId: login_create
+      description: Authenticates username and password, then generates and emails
+        a 6-digit OTP verification code. Returns a session_token required for Step
+        2 verification.
+      summary: 'Log in (Step 1: Credentials)'
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login2FA'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Login2FA'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Login2FA'
+        required: true
+      security:
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Login2FAResponse'
+          description: ''
+        '400':
+          description: Invalid username/password or inactive account
+        '500':
+          description: Failed to send verification email
+  /api/projects/:
+    get:
+      operationId: projects_list
+      description: Returns all projects owned by the authenticated user.
+      summary: List all projects
+      tags:
+      - Projects
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Project'
+          description: ''
+    post:
+      operationId: projects_create
+      description: Creates a new project and triggers an initial AST sync if a GitHub
+        repository is linked.
+      summary: Create a project
+      tags:
+      - Projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+  /api/projects/{id}/:
+    get:
+      operationId: projects_retrieve
+      description: Returns details of a specific project by ID.
+      summary: Retrieve a project
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - Projects
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    put:
+      operationId: projects_update
+      description: Replaces all fields of a specific project.
+      summary: Update a project
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - Projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Project'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Project'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Project'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    patch:
+      operationId: projects_partial_update
+      description: Updates specific fields of a project.
+      summary: Partially update a project
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - Projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedProject'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+          description: ''
+    delete:
+      operationId: projects_destroy
+      description: Deletes a specific project.
+      summary: Delete a project
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - Projects
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/projects/{id}/index_status/:
+    get:
+      operationId: projects_index_status_retrieve
+      description: Returns real-time indexing progress, current step, and live logs
+        from Redis cache.
+      summary: Get live RAG indexing status and console logs
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - Projects
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectIndexStatusResponse'
+          description: ''
+  /api/projects/{id}/sync_repo/:
+    post:
+      operationId: projects_sync_repo_create
+      description: Clones or downloads repository code from GitHub, parses Python/JS/TS
+        AST, and saves the structural outline to the project.
+      summary: Sync repository AST structure from GitHub
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this project.
+        required: true
+      tags:
+      - Projects
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectSyncRepoRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ProjectSyncRepoRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ProjectSyncRepoRequest'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectSyncRepoResponse'
+          description: ''
+        '400':
+          description: Sync failed or repository is empty
+        '500':
+          description: Internal server error during sync
+  /api/register/:
+    post:
+      operationId: register_create
+      description: Creates a new user account and returns JWT access and refresh tokens.
+      summary: Register a new user
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Register'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Register'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Register'
+        required: true
+      security:
+      - {}
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+          description: ''
+        '400':
+          description: Validation errors (e.g., username/email already taken)
+  /api/tasks/:
+    get:
+      operationId: tasks_list
+      description: Returns all tasks owned by the authenticated user.
+      summary: List all tasks
+      tags:
+      - Tasks
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Task'
+          description: ''
+    post:
+      operationId: tasks_create
+      description: Creates a new task assigned to the authenticated user.
+      summary: Create a task
+      tags:
+      - Tasks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Task'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Task'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Task'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: ''
+  /api/tasks/{id}/:
+    get:
+      operationId: tasks_retrieve
+      description: Returns details of a specific task by ID.
+      summary: Retrieve a task
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task.
+        required: true
+      tags:
+      - Tasks
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: ''
+    put:
+      operationId: tasks_update
+      description: Replaces all fields of a specific task.
+      summary: Update a task
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task.
+        required: true
+      tags:
+      - Tasks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Task'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Task'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Task'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: ''
+    patch:
+      operationId: tasks_partial_update
+      description: Updates specific fields of a task.
+      summary: Partially update a task
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task.
+        required: true
+      tags:
+      - Tasks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTask'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTask'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTask'
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Task'
+          description: ''
+    delete:
+      operationId: tasks_destroy
+      description: Deletes a specific task.
+      summary: Delete a task
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this task.
+        required: true
+      tags:
+      - Tasks
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/tasks/gen/:
+    post:
+      operationId: tasks_gen_create
+      description: Parses natural language prompt with Gemini AI into a structured
+        Task, optionally taking a project outline into account.
+      summary: Generate a task from natural language text (AI)
+      tags:
+      - Tasks
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskGenRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TaskGenRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TaskGenRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskGenResponse'
+          description: ''
+        '400':
+          description: No text provided
+        '404':
+          description: Project not found or access denied
+  /api/token/:
+    post:
+      operationId: token_create
+      description: Takes username and password credentials and returns a JWT access
+        and refresh token pair directly.
+      summary: Obtain JWT token pair (Direct)
+      tags:
+      - Authentication
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/token/refresh/:
+    post:
+      operationId: token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - token
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/users/:
+    get:
+      operationId: users_list
+      description: Returns a list of all users registered in the system.
+      summary: List all users
+      tags:
+      - Users
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve
+      description: Returns details for a specific user by ID.
+      summary: Retrieve user details
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        required: true
+      tags:
+      - Users
+      security:
+      - jwtAuth: []
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+components:
+  schemas:
+    CalendarTokenResponse:
+      type: object
+      properties:
+        calendar_token:
+          type: string
+        feed_url:
+          type: string
+          description: Standard HTTPS .ics feed URL
+        webcal_url:
+          type: string
+          description: Webcal protocol URL for direct calendar subscription
+      required:
+      - calendar_token
+      - feed_url
+      - webcal_url
+    Login2FA:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - password
+      - username
+    Login2FAResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        2fa_required:
+          type: boolean
+        session_token:
+          type: string
+        email:
+          type: string
+      required:
+      - 2fa_required
+      - email
+      - message
+      - session_token
+    PatchedProject:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+          readOnly: true
+        github_token:
+          type: string
+          writeOnly: true
+          default: ''
+        name:
+          type: string
+          maxLength: 100
+        github_repo:
+          type: string
+          description: e.g. 'owner/repository'
+          maxLength: 200
+        ast_outline:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_indexed:
+          type: boolean
+          readOnly: true
+          description: Indicates whether this project's code has been embedded into
+            ChromaDB
+        last_indexed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Timestamp of when the repository was last embedded
+        collection_name:
+          type: string
+          readOnly: true
+          description: ChromaDB collection identifier, e.g. 'project_1'
+        embedding_model:
+          type: string
+          readOnly: true
+          description: Model used to generate vectors (gemini-embedding-2 or gemini-embedding-001)
+        owner:
+          type: integer
+          readOnly: true
+    PatchedTask:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        completed:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+        ticket_type:
+          $ref: '#/components/schemas/TicketTypeEnum'
+        subtasks: {}
+        owner:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+          nullable: true
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+          readOnly: true
+        github_token:
+          type: string
+          writeOnly: true
+          default: ''
+        name:
+          type: string
+          maxLength: 100
+        github_repo:
+          type: string
+          description: e.g. 'owner/repository'
+          maxLength: 200
+        ast_outline:
+          type: string
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        is_indexed:
+          type: boolean
+          readOnly: true
+          description: Indicates whether this project's code has been embedded into
+            ChromaDB
+        last_indexed_at:
+          type: string
+          format: date-time
+          readOnly: true
+          nullable: true
+          description: Timestamp of when the repository was last embedded
+        collection_name:
+          type: string
+          readOnly: true
+          description: ChromaDB collection identifier, e.g. 'project_1'
+        embedding_model:
+          type: string
+          readOnly: true
+          description: Model used to generate vectors (gemini-embedding-2 or gemini-embedding-001)
+        owner:
+          type: integer
+          readOnly: true
+      required:
+      - ast_outline
+      - collection_name
+      - created_at
+      - embedding_model
+      - id
+      - is_indexed
+      - last_indexed_at
+      - name
+      - owner
+      - tasks
+    ProjectIndexStatusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        progress:
+          type: integer
+        stage:
+          type: string
+        current_step:
+          type: string
+        logs:
+          type: array
+          items:
+            type: string
+        is_indexed:
+          type: boolean
+        embedding_model:
+          type: string
+          nullable: true
+      required:
+      - current_step
+      - embedding_model
+      - is_indexed
+      - logs
+      - progress
+      - stage
+      - status
+    ProjectSyncRepoRequest:
+      type: object
+      properties:
+        github_token:
+          type: string
+          description: GitHub Personal Access Token (PAT) for private repositories
+            (optional if configured on project)
+    ProjectSyncRepoResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        message:
+          type: string
+        ast_preview:
+          type: string
+      required:
+      - ast_preview
+      - message
+      - status
+    RefreshCalendarTokenResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        calendar_token:
+          type: string
+        feed_url:
+          type: string
+        webcal_url:
+          type: string
+      required:
+      - calendar_token
+      - feed_url
+      - message
+      - webcal_url
+    Register:
+      type: object
+      properties:
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - email
+      - password
+      - username
+    RegisterResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        access:
+          type: string
+        refresh:
+          type: string
+        user:
+          $ref: '#/components/schemas/RegisteredUserDetails'
+      required:
+      - access
+      - message
+      - refresh
+      - user
+    RegisteredUserDetails:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+      required:
+      - email
+      - id
+      - username
+    Resend2FA:
+      type: object
+      properties:
+        session_token:
+          type: string
+      required:
+      - session_token
+    Resend2FAResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        session_token:
+          type: string
+        email:
+          type: string
+      required:
+      - email
+      - message
+      - session_token
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        title:
+          type: string
+          maxLength: 200
+        description:
+          type: string
+          nullable: true
+        completed:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        due_date:
+          type: string
+          format: date-time
+          nullable: true
+        ticket_type:
+          $ref: '#/components/schemas/TicketTypeEnum'
+        subtasks: {}
+        owner:
+          type: integer
+          readOnly: true
+        project:
+          type: integer
+          nullable: true
+      required:
+      - created_at
+      - id
+      - owner
+      - title
+    TaskGenRequest:
+      type: object
+      properties:
+        text:
+          type: string
+          description: Natural language description of the task
+        timezone:
+          type: string
+          default: UTC
+          description: User's local timezone (e.g. UTC, America/New_York)
+        project_id:
+          type: integer
+          nullable: true
+          description: Optional project ID to associate task with
+      required:
+      - text
+    TaskGenResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        task:
+          $ref: '#/components/schemas/Task'
+        retrieved_chunks:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+        rag_model:
+          type: string
+          nullable: true
+        ast_outline_used:
+          type: boolean
+      required:
+      - message
+      - task
+    TicketTypeEnum:
+      enum:
+      - bug
+      - feature
+      - chore
+      type: string
+      description: |-
+        * `bug` - Bug
+        * `feature` - Feature
+        * `chore` - Chore
+    TokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - password
+      - refresh
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        tasks:
+          type: array
+          items:
+            type: integer
+        owner:
+          type: string
+          readOnly: true
+      required:
+      - id
+      - owner
+      - tasks
+      - username
+    VerifiedUserDetails:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+      required:
+      - email
+      - id
+      - username
+    Verify2FA:
+      type: object
+      properties:
+        session_token:
+          type: string
+        otp:
+          type: string
+          maxLength: 6
+          minLength: 6
+      required:
+      - otp
+      - session_token
+    Verify2FAResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        access:
+          type: string
+        refresh:
+          type: string
+        user:
+          $ref: '#/components/schemas/VerifiedUserDetails'
+      required:
+      - access
+      - message
+      - refresh
+      - user
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: sessionid
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

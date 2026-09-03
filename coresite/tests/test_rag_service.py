@@ -10,6 +10,7 @@ from coresite.services.rag_service import (
     index_project_chunks,
     normalize_vector,
     retrieve_relevant_code,
+    retrieve_relevant_code_with_metadata,
 )
 
 
@@ -328,3 +329,35 @@ def test_retrieve_relevant_code_success():
             result = retrieve_relevant_code(1, "authenticate user", model="gemini-embedding-001", top_k=1)
             assert "--- Code Snippet from coresite/auth.py (Lines 15-25) ---" in result
             assert "def authenticate():" in result
+
+
+def test_retrieve_relevant_code_with_metadata_structured():
+    mock_collection = MagicMock()
+    mock_collection.query.return_value = {
+        "documents": [
+            [
+                "def authenticate():\n    return True",
+            ]
+        ],
+        "metadatas": [
+            [
+                {"filepath": "coresite/auth.py", "start_line": 15, "end_line": 25, "symbol_type": "function"},
+            ]
+        ],
+        "distances": [[0.12345]],
+    }
+    mock_chroma = MagicMock()
+    mock_chroma.get_collection.return_value = mock_collection
+
+    with patch("coresite.services.rag_service.get_chroma_client", return_value=mock_chroma):
+        with patch("coresite.services.rag_service.embed_code_query", return_value=[0.1, 0.2]):
+            text, chunks = retrieve_relevant_code_with_metadata(1, "auth query", model="gemini-embedding-001", top_k=1)
+            assert "--- Code Snippet from coresite/auth.py (Lines 15-25) ---" in text
+            assert len(chunks) == 1
+            assert chunks[0]["filepath"] == "coresite/auth.py"
+            assert chunks[0]["start_line"] == 15
+            assert chunks[0]["end_line"] == 25
+            assert chunks[0]["symbol_type"] == "function"
+            assert chunks[0]["distance"] == 0.1235
+            assert "def authenticate():" in chunks[0]["code"]
+
