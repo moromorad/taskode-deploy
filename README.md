@@ -1,6 +1,23 @@
 # 🚀 TasKode — AI-Powered Task & Repository Intelligence Platform
 
-A modern, full-stack developer task management and ticket intelligence platform built with **Django 6.0**, **Django REST Framework (DRF)**, **Celery 5.6**, **Redis**, **Tree-sitter AST parsing**, **ChromaDB Vector Store**, and **Google Gemini 3.6 Flash & Embedding-001**.
+> **💡 What is TasKode?**  
+> **TasKode is an AI-powered project and task management platform for developers and engineering teams.**  
+> It transforms **natural language prompts** (feature ideas, bug reports, or requirements) into **structured, context-aware engineering tickets and actionable subtasks** grounded in your actual GitHub repository. It includes **user authentication with email OTP Two-Factor Authentication (2FA)** and **calendar integration (iCal / Webcal)** to sync task deadlines directly to your preferred calendar app.
+
+---
+
+## 📌 At a Glance: What This Project Does
+
+* **🗣️ Natural Language to Structured Tickets:** Simply describe a task in plain English (e.g. *"Implement rate limiting on the 2FA login endpoint"*). TasKode generates a full engineering ticket with title, description, ticket type (feature/bug/chore), due date, and an actionable checklist of subtasks.
+* **🧠 Grounded in Your Codebase (Not Generic Hallucinations):** Connects to GitHub repositories, parses code using Tree-sitter AST outlines, and uses deep semantic vector embeddings to identify the exact files, classes, and methods relevant to the ticket.
+* **🚫 No Automated Code Writing:** Focuses purely on task management, technical planning, and issue scoping—leaving code implementation under human control.
+* **📅 Calendar & Reminders Integration:** Provides private RFC 5545 iCal (`.ics`) and Webcal feeds so your tasks, deadlines, and milestones automatically synchronize with Google Calendar, Apple Calendar, Outlook, and Apple Reminders.
+* **🔐 Secure Authentication & 2FA:** Features user registration and login with JWT access/refresh tokens alongside a Two-Factor Authentication (2FA) flow utilizing 6-digit email OTP codes with strict rate limiting and expiration.
+* **💻 Interactive Single Page App UI:** Includes a dark-theme web dashboard to manage projects, create/track tickets, toggle subtask completion, and monitor real-time background repository indexing progress.
+
+---
+
+A modern, full-stack platform built with **Django 6.0**, **Django REST Framework (DRF)**, **Celery 5.6**, **Redis**, **Tree-sitter AST parsing**, **PostgreSQL / ChromaDB**, and **Google Gemini 3.6 Flash & Embedding-001**.
 
 The platform bridges codebases and project management by extracting repository structure outlines (AST) and deep semantic vector embeddings directly from GitHub, enabling Generative AI to produce actionable, context-aware engineering tickets with step-by-step subtasks, deadlines, and file references.
 
