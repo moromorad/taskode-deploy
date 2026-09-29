@@ -3,6 +3,9 @@
 > **💡 What is TasKode?**  
 > **TasKode is an AI-powered project and task management platform for developers and engineering teams.**  
 > It transforms **natural language prompts** (feature ideas, bug reports, or requirements) into **structured, context-aware engineering tickets and actionable subtasks** grounded in your actual GitHub repository. It includes **user authentication with email OTP Two-Factor Authentication (2FA)** and **calendar integration (iCal / Webcal)** to sync task deadlines directly to your preferred calendar app.
+>
+> 🏛️ **Project Background & Disclaimer:**  
+> Developed as an independent personal project during a software engineering internship at **Paymob** under engineering supervision and mentorship. It is an exploratory project, is not an official Paymob product or in production use by the company, and contains no proprietary code or confidential company data.
 
 ---
 
@@ -465,3 +468,12 @@ The codebase includes a comprehensive test suite covering authentication, 2FA, A
 - **Zero Token Hard Limits:** All chunk sizes enforce elastic soft boundaries with hard safety barriers preventing token overflow or API errors.
 - **Deterministic Incremental Indexing:** Uses SHA-256 content hashing to minimize API calls and prevent redundant embedding operations.
 - **Secrets Isolation:** All credentials, tokens, and keys are loaded through `.env` with strict exclusions in `.gitignore`.
+
+---
+
+## 🏛️ Project Background & Acknowledgements
+
+This project was conceived and built as an independent personal project during a software engineering internship at **Paymob** under company engineering supervision and mentorship:
+- **Independent Exploration:** Developed as an exploratory initiative to research AST parsing, Code-RAG retrieval, and codebase-grounded task intelligence.
+- **Disclaimer:** This project is an independent demonstration. It is not affiliated with, maintained by, or in production use at Paymob, and contains no confidential or proprietary company code or infrastructure.
+
